@@ -270,6 +270,9 @@ export interface WalletBalance {
   walletBalance: number;
   bonusBalance: number;
   totalBalance: number;
+  availableBalance: number;
+  pendingPayments: number;
+  pendingWithdrawalAmount: number;
 }
 
 export interface WalletTransaction {

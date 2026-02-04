@@ -573,15 +573,15 @@ export default function WalletPage() {
 
         {/* Deposit Dialog */}
         <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
-          <DialogContent className="max-w-md rounded-[32px] p-6 border-none overflow-hidden">
-            <DialogHeader>
+          <DialogContent className="max-w-md rounded-[32px] border-none flex flex-col max-h-[90vh] overflow-hidden">
+            <DialogHeader className="shrink-0 p-6 pb-2">
               <DialogTitle className="text-2xl font-bold">Nạp tiền vào ví</DialogTitle>
               <DialogDescription>
                 Chuyển khoản chính xác số tiền và tải ảnh minh chứng để được duyệt nhanh nhất
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-5 py-4">
+            <div className="space-y-5 px-6 py-4 overflow-y-auto flex-1">
               {/* Bank Info */}
               {bankInfo && (
                 <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100 relative overflow-hidden">
@@ -670,7 +670,7 @@ export default function WalletPage() {
               </div>
             </div>
 
-            <DialogFooter className="sm:justify-between gap-3 pt-2">
+            <DialogFooter className="shrink-0 sm:justify-between gap-3 px-6 py-4 border-t">
               <Button variant="ghost" className="rounded-full px-6 font-bold flex-1" onClick={() => setDepositDialogOpen(false)}>Hủy bỏ</Button>
               <Button onClick={handleDeposit} disabled={depositMutation.isPending || !depositAmount || !proofImage} className="rounded-full px-10 font-bold flex-1 h-12 shadow-lg shadow-primary/20">
                 {depositMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : null}
@@ -682,19 +682,39 @@ export default function WalletPage() {
 
         {/* Withdraw Dialog */}
         <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
-          <DialogContent className="max-w-md rounded-[32px] p-6 border-none">
-            <DialogHeader>
+          <DialogContent className="max-w-md rounded-[32px] border-none flex flex-col max-h-[90vh] overflow-hidden">
+            <DialogHeader className="shrink-0 p-6 pb-2">
               <DialogTitle className="text-2xl font-bold">Rút tiền về ngân hàng</DialogTitle>
               <DialogDescription>
                 Tiền sẽ được chuyển về tài khoản của bạn sau khi admin duyệt yêu cầu
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-5 py-4">
+            <div className="space-y-5 px-6 py-4 overflow-y-auto flex-1">
               <div className="p-4 bg-amber-50 rounded-3xl border border-amber-100 border-dashed">
                 <p className="text-xs text-amber-700 font-bold uppercase tracking-wide mb-1">Số dư khả dụng</p>
-                <p className="text-2xl font-bold text-amber-900">{formatCurrency(balance?.walletBalance || 0)}</p>
-                <p className="text-[10px] text-amber-600 mt-2 italic">* Chỉ có thể rút tiền từ số dư chính, không bao gồm tiền khuyến mãi.</p>
+                <p className={`text-2xl font-bold ${(balance?.availableBalance ?? 0) < 0 ? 'text-red-600' : 'text-amber-900'}`}>
+                  {formatCurrency(balance?.availableBalance ?? 0)}
+                </p>
+                <div className="mt-2 space-y-1">
+                  <div className="flex justify-between text-[11px] text-amber-600">
+                    <span>Số dư chính</span>
+                    <span>{formatCurrency(balance?.walletBalance || 0)}</span>
+                  </div>
+                  {(balance?.pendingPayments ?? 0) > 0 && (
+                    <div className="flex justify-between text-[11px] text-red-500">
+                      <span>− Đang chờ thanh toán đặt phòng</span>
+                      <span>{formatCurrency(balance?.pendingPayments ?? 0)}</span>
+                    </div>
+                  )}
+                  {(balance?.pendingWithdrawalAmount ?? 0) > 0 && (
+                    <div className="flex justify-between text-[11px] text-red-500">
+                      <span>− Đang chờ duyệt rút tiền</span>
+                      <span>{formatCurrency(balance?.pendingWithdrawalAmount ?? 0)}</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-amber-600 mt-2 italic">* Chỉ có thể rút tiền từ số dư chính, không bao gồm tiền khuyến mãi và các khoản đang chờ.</p>
               </div>
 
               <div className="space-y-2">
@@ -705,7 +725,7 @@ export default function WalletPage() {
                   value={withdrawAmount}
                   onChange={(e) => setWithdrawAmount(e.target.value)}
                   min={10000}
-                  max={balance?.walletBalance || 0}
+                  max={balance?.availableBalance || 0}
                   className="h-14 rounded-2xl border-gray-200 focus:border-primary focus:ring-primary pl-4 text-lg font-bold"
                 />
               </div>
@@ -743,7 +763,7 @@ export default function WalletPage() {
               </div>
             </div>
 
-            <DialogFooter className="sm:justify-between gap-3 pt-2">
+            <DialogFooter className="shrink-0 sm:justify-between gap-3 px-6 py-4 border-t">
               <Button variant="ghost" className="rounded-full px-6 font-bold flex-1" onClick={() => setWithdrawDialogOpen(false)}>Hủy bỏ</Button>
               <Button onClick={handleWithdraw} disabled={withdrawMutation.isPending || !withdrawAmount || !withdrawBankInfo.bankName} className="rounded-full px-10 font-bold flex-1 h-12 shadow-lg shadow-primary/20">
                 {withdrawMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : null}
