@@ -371,12 +371,12 @@ export default function PromotionsManagePage() {
 
             <div>
               <Label>Áp dụng cho khách sạn (không bắt buộc)</Label>
-              <Select value={formData.hotel} onValueChange={(v) => setFormData({ ...formData, hotel: v })}>
+              <Select value={formData.hotel || 'all'} onValueChange={(v) => setFormData({ ...formData, hotel: v === 'all' ? '' : v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Tất cả khách sạn" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tất cả khách sạn</SelectItem>
+                  <SelectItem value="all">Tất cả khách sạn</SelectItem>
                   {hotels.map((hotel: Hotel) => (
                     <SelectItem key={hotel._id} value={hotel._id}>{hotel.name}</SelectItem>
                   ))}

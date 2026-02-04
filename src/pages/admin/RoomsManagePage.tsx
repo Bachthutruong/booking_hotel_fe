@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Loader2, 
@@ -8,7 +8,9 @@ import {
   Building2, 
   ChevronLeft, 
   ChevronRight, 
-  Image as ImageIcon 
+  Image as ImageIcon,
+  Search,
+  Filter
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -48,6 +50,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
 import { hotelService } from '@/services/hotelService';
 import { categoryService } from '@/services/categoryService';
 import { toast } from '@/hooks/use-toast';
@@ -58,6 +61,10 @@ export default function RoomsManagePage() {
   const [selectedHotel, setSelectedHotel] = useState<string>('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  
   const [editRoom, setEditRoom] = useState<Room | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteRoom, setDeleteRoom] = useState<Room | null>(null);
@@ -68,12 +75,25 @@ export default function RoomsManagePage() {
     queryFn: () => hotelService.getHotels({ limit: 100 }),
   });
 
-  const hotels = hotelsData?.data || [];
+  // Fetch Categories for Filter
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories-list'],
+    queryFn: () => categoryService.getAllCategories({ limit: 100 }),
+  });
 
-  // Fetch Rooms (depends on selectedHotel)
+  const hotels = hotelsData?.data || [];
+  const categories = categoriesData?.data || [];
+
+  // Fetch Rooms (depends on filters)
   const { data: roomsData, isLoading } = useQuery({
-    queryKey: ['admin-rooms', selectedHotel, page, limit],
-    queryFn: () => selectedHotel ? hotelService.getRooms(selectedHotel, { page, limit }) : Promise.resolve({ data: [], success: true, pagination: { page:1, limit:10, total:0, totalPages:0 } }),
+    queryKey: ['admin-rooms', selectedHotel, page, limit, search, categoryFilter, statusFilter],
+    queryFn: () => selectedHotel ? hotelService.getRooms(selectedHotel, { 
+      page, 
+      limit,
+      search,
+      category: categoryFilter,
+      isActive: statusFilter
+    }) : Promise.resolve({ data: [], success: true, pagination: { page:1, limit:10, total:0, totalPages:0 } }),
     enabled: !!selectedHotel
   });
 
@@ -92,6 +112,11 @@ export default function RoomsManagePage() {
   const rooms = roomsData?.data || [];
   const pagination = roomsData?.pagination;
 
+  const hotelItems: ComboboxItem[] = hotels.map(h => ({
+    value: h._id,
+    label: h.name,
+  }));
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -108,34 +133,76 @@ export default function RoomsManagePage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-4">
+        {/* Hotel Selection - Combobox */}
         <div className="w-full max-w-sm">
-          <Select value={selectedHotel} onValueChange={(v) => { setSelectedHotel(v); setPage(1); }}>
-              <SelectTrigger>
-                  <SelectValue placeholder="Chọn khách sạn..." />
-              </SelectTrigger>
-              <SelectContent>
-                  {hotels.map((h: Hotel) => (
-                      <SelectItem key={h._id} value={h._id}>{h.name}</SelectItem>
-                  ))}
-              </SelectContent>
-          </Select>
+          <Combobox
+            items={hotelItems}
+            value={selectedHotel}
+            onChange={(val) => { setSelectedHotel(val); setPage(1); }}
+            placeholder="Chọn khách sạn..."
+            searchPlaceholder="Tìm kiếm khách sạn..."
+            emptyText="Không tìm thấy khách sạn."
+          />
         </div>
+
         {selectedHotel && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Hiển thị:</span>
-            <Select value={limit.toString()} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
-              <SelectTrigger className="w-20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="5">5</SelectItem>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="text-sm text-muted-foreground">mục</span>
+          <div className="flex flex-wrap gap-4 items-center bg-white p-4 rounded-lg border shadow-sm">
+            {/* Search */}
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Tìm kiếm tên phòng..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="pl-8"
+              />
+            </div>
+
+            {/* Category Filter */}
+            <div className="w-full md:w-48">
+              <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Loại phòng" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả loại phòng</SelectItem>
+                  {categories.map((cat: RoomCategory) => (
+                    <SelectItem key={cat._id} value={cat._id}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Status Filter */}
+            <div className="w-full md:w-40">
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Trạng thái" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tất cả trạng thái</SelectItem>
+                  <SelectItem value="true">Đang hoạt động</SelectItem>
+                  <SelectItem value="false">Đã ẩn</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Limit Filter */}
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-sm text-muted-foreground hidden md:inline">Hiển thị:</span>
+              <Select value={limit.toString()} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
+                <SelectTrigger className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
       </div>
@@ -167,7 +234,7 @@ export default function RoomsManagePage() {
                 {rooms.length === 0 ? (
                     <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                            Khách sạn này chưa có phòng nào.
+                            Không tìm thấy phòng nào phù hợp.
                         </TableCell>
                     </TableRow>
                 ) : (
@@ -432,7 +499,7 @@ function RoomFormDialog({
                                              </SelectItem>
                                          ))
                                      ) : (
-                                         <SelectItem value="" disabled>
+                                         <SelectItem value="none" disabled>
                                              Chưa có danh mục phòng
                                          </SelectItem>
                                      )}

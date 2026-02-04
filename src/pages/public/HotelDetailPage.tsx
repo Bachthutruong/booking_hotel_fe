@@ -17,7 +17,9 @@ import {
   Calendar,
   Check,
   Share,
-  Heart
+  Heart,
+  Layers,
+  ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -36,9 +38,10 @@ import {
 } from '@/components/ui/dialog';
 import { HtmlContent } from '@/components/ui/HtmlContent';
 import { hotelService } from '@/services/hotelService';
+import { categoryService } from '@/services/categoryService';
 import { formatPrice, getRoomTypeText } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
-import type { Room, Review } from '@/types';
+import type { Room, Review, RoomCategory } from '@/types';
 
 const amenityIcons: Record<string, React.ReactNode> = {
   'Wifi miễn phí': <Wifi className="h-5 w-5" />,
@@ -47,6 +50,8 @@ const amenityIcons: Record<string, React.ReactNode> = {
   'Bãi đậu xe': <Car className="h-5 w-5" />,
   'Nhà hàng': <Coffee className="h-5 w-5" />,
 };
+
+const ROOMS_PER_PAGE = 3;
 
 export function HotelDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +62,10 @@ export function HotelDetailPage() {
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Category filter and load more state
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [visibleRoomsCount, setVisibleRoomsCount] = useState(ROOMS_PER_PAGE);
 
   // Function to check availability and switch to rooms tab
   const handleCheckAvailability = () => {
@@ -82,7 +91,7 @@ export function HotelDetailPage() {
     queryFn: () =>
       checkIn && checkOut
         ? hotelService.getAvailableRooms(id!, checkIn, checkOut)
-        : hotelService.getRooms(id!),
+        : hotelService.getRooms(id!, { limit: 100 }),
     enabled: !!id,
   });
 
@@ -92,11 +101,49 @@ export function HotelDetailPage() {
     enabled: !!id,
   });
 
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => categoryService.getCategories(),
+  });
+
   const hotel = hotelData?.data;
-  const rooms = roomsData?.data || [];
+  const allRooms = roomsData?.data || [];
   const reviews = reviewsData?.data || [];
+  const categories = categoriesData?.data || [];
+
+  // Filter rooms by category
+  const filteredRooms = selectedCategory
+    ? allRooms.filter((r: Room) => (r.category as any)?._id === selectedCategory || r.category === selectedCategory)
+    : allRooms;
+
+  // Visible rooms (for load more)
+  const visibleRooms = filteredRooms.slice(0, visibleRoomsCount);
+  const hasMoreRooms = filteredRooms.length > visibleRoomsCount;
+
+  // Reset visible count when category changes
+  const handleCategoryChange = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    setVisibleRoomsCount(ROOMS_PER_PAGE);
+  };
+
+  const handleLoadMore = () => {
+    setVisibleRoomsCount((prev) => prev + ROOMS_PER_PAGE);
+  };
 
   const handleBookRoom = (room: Room) => {
+    if (!checkIn || !checkOut) {
+        // Scroll to date selection or show prompt
+        setActiveTab('rooms');
+        setTimeout(() => {
+            document.getElementById('rooms-section')?.scrollIntoView({ behavior: 'smooth' });
+             // Optionally focus date inputs
+             const dateInput = document.getElementById('checkIn-inline');
+             if (dateInput) dateInput.focus();
+        }, 100);
+        // You could add a toast here: toast.error("Vui lòng chọn ngày nhận/trả phòng")
+        return;
+    }
+
     if (!isAuthenticated) {
       navigate('/auth/login', { state: { from: `/hotels/${id}` } });
       return;
@@ -276,6 +323,7 @@ export function HotelDetailPage() {
                     <div className="flex-1 w-full">
                         <Label className="mb-2 block text-sm">Ngày nhận phòng</Label>
                         <Input
+                          id="checkIn-inline"
                           type="date"
                           value={checkIn}
                           onChange={(e) => setCheckIn(e.target.value)}
@@ -295,6 +343,44 @@ export function HotelDetailPage() {
                     </div>
                 </div>
 
+                {/* Category Filter */}
+                {categories.length > 0 && (
+                  <div className="bg-white p-4 rounded-2xl shadow-sm border border-border/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Layers className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">Lọc theo loại phòng:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant={selectedCategory === '' ? 'default' : 'outline'}
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => handleCategoryChange('')}
+                      >
+                        Tất cả ({allRooms.length})
+                      </Button>
+                      {categories.map((category: RoomCategory) => {
+                        const count = allRooms.filter((r: Room) =>
+                          (r.category as any)?._id === category._id || r.category === category._id
+                        ).length;
+                        if (count === 0) return null;
+                        return (
+                          <Button
+                            key={category._id}
+                            variant={selectedCategory === category._id ? 'default' : 'outline'}
+                            size="sm"
+                            className="rounded-full"
+                            onClick={() => handleCategoryChange(category._id)}
+                          >
+                            {category.icon && <span className="mr-1">{category.icon}</span>}
+                            {category.name} ({count})
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Rooms List */}
                 {loadingRooms ? (
                   <div className="space-y-4">
@@ -302,24 +388,43 @@ export function HotelDetailPage() {
                       <Skeleton key={i} className="h-64 rounded-2xl" />
                     ))}
                   </div>
-                ) : rooms.length > 0 ? (
+                ) : filteredRooms.length > 0 ? (
                   <div className="space-y-6">
-                    {rooms.map((room: Room) => (
+                    {visibleRooms.map((room: Room) => (
                       <RoomCard
                         key={room._id}
                         room={room}
                         onBook={() => handleBookRoom(room)}
-                        disabled={!checkIn || !checkOut}
+                        disabled={room.isAvailable === false}
                       />
                     ))}
+
+                    {/* Load More Button */}
+                    {hasMoreRooms && (
+                      <div className="text-center pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={handleLoadMore}
+                          className="rounded-full px-8"
+                        >
+                          <ChevronDown className="mr-2 h-4 w-4" />
+                          Xem thêm {Math.min(ROOMS_PER_PAGE, filteredRooms.length - visibleRoomsCount)} phòng
+                          <span className="ml-2 text-muted-foreground">
+                            ({visibleRoomsCount}/{filteredRooms.length})
+                          </span>
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-gray-300">
                     <Calendar className="mx-auto h-12 w-12 text-gray-300 mb-4" />
                     <p className="text-muted-foreground font-medium">
-                      Không tìm thấy phòng trống cho ngày bạn chọn.
+                      {selectedCategory ? 'Không có phòng nào trong danh mục này.' : 'Không tìm thấy phòng trống cho ngày bạn chọn.'}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1">Vui lòng thử thay đổi ngày hoặc liên hệ khách sạn.</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {selectedCategory ? 'Vui lòng chọn danh mục khác.' : 'Vui lòng thử thay đổi ngày hoặc liên hệ khách sạn.'}
+                    </p>
                   </div>
                 )}
               </TabsContent>
@@ -367,6 +472,7 @@ export function HotelDetailPage() {
                                      <Label className="text-xs uppercase text-muted-foreground font-semibold tracking-wider">Nhận phòng</Label>
                                      <div className="relative">
                                          <input 
+                                            id="checkIn-sidebar"
                                             type="date" 
                                             className="w-full bg-secondary/50 rounded-lg p-2.5 text-sm border-none focus:ring-2 focus:ring-primary outline-none"
                                             value={checkIn}
@@ -390,7 +496,17 @@ export function HotelDetailPage() {
                              </div>
                          </div>
 
-                         <Button className="w-full h-12 rounded-full text-base font-medium shadow-md hover:shadow-lg transition-all" size="lg" disabled={!checkIn || !checkOut} onClick={handleCheckAvailability}>
+                         <Button 
+                            className="w-full h-12 rounded-full text-base font-medium shadow-md hover:shadow-lg transition-all" 
+                            size="lg" 
+                            onClick={() => {
+                                if (!checkIn || !checkOut) {
+                                    document.getElementById('checkIn-sidebar')?.focus();
+                                    return;
+                                }
+                                handleCheckAvailability();
+                            }}
+                        >
                              Kiểm tra phòng trống
                          </Button>
 
@@ -525,7 +641,7 @@ function RoomCard({ room, onBook, disabled }: { room: Room; onBook: () => void; 
                         {room.isAvailable ? `Còn ${room.availableQuantity} phòng` : 'Hết phòng'}
                     </span>
                   )}
-                  <Button onClick={onBook} disabled={disabled || !room.isAvailable} className="rounded-full px-6 shadow-md hover:shadow-lg transition-all">
+                  <Button onClick={onBook} disabled={disabled} className="rounded-full px-6 shadow-md hover:shadow-lg transition-all">
                     Chọn phòng
                   </Button>
               </div>

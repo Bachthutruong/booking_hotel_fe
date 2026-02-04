@@ -42,6 +42,13 @@ export const bookingService = {
     status?: string;
     page?: number;
     limit?: number;
+    hotelId?: string;
+    roomId?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    checkInStart?: string;
+    checkInEnd?: string;
   }): Promise<BookingsResponse> {
     const { data } = await api.get<BookingsResponse>('/bookings', { params });
     return data;

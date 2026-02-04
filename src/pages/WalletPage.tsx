@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, History, Gift, CreditCard, Upload, Building2, Loader2, Sparkles } from 'lucide-react';
+import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, History, Gift, CreditCard, Upload, Building2, Loader2, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -65,25 +72,35 @@ export default function WalletPage() {
     accountName: '',
   });
 
+  // Pagination states
+  const [txPage, setTxPage] = useState(1);
+  const [txLimit, setTxLimit] = useState(10);
+  
+  const [depPage, setDepPage] = useState(1);
+  const [depLimit, setDepLimit] = useState(10);
+  
+  const [wdPage, setWdPage] = useState(1);
+  const [wdLimit, setWdLimit] = useState(10);
+
   // Queries
   const { data: balanceData, isLoading: balanceLoading } = useQuery({
     queryKey: ['walletBalance'],
     queryFn: () => walletService.getBalance(),
   });
 
-  const { data: transactionsData } = useQuery({
-    queryKey: ['walletTransactions'],
-    queryFn: () => walletService.getTransactions({ limit: 20 }),
+  const { data: transactionsData, isLoading: transactionsLoading } = useQuery({
+    queryKey: ['walletTransactions', txPage, txLimit],
+    queryFn: () => walletService.getTransactions({ page: txPage, limit: txLimit }),
   });
 
-  const { data: depositsData } = useQuery({
-    queryKey: ['myDeposits'],
-    queryFn: () => walletService.getMyDeposits({ limit: 10 }),
+  const { data: depositsData, isLoading: depositsLoading } = useQuery({
+    queryKey: ['myDeposits', depPage, depLimit],
+    queryFn: () => walletService.getMyDeposits({ page: depPage, limit: depLimit }),
   });
 
-  const { data: withdrawalsData } = useQuery({
-    queryKey: ['myWithdrawals'],
-    queryFn: () => walletService.getMyWithdrawals({ limit: 10 }),
+  const { data: withdrawalsData, isLoading: withdrawalsLoading } = useQuery({
+    queryKey: ['myWithdrawals', wdPage, wdLimit],
+    queryFn: () => walletService.getMyWithdrawals({ page: wdPage, limit: wdLimit }),
   });
 
   const { data: promotionsData } = useQuery({
@@ -198,8 +215,14 @@ export default function WalletPage() {
 
   const balance = balanceData?.data;
   const transactions = transactionsData?.data || [];
+  const txPagination = transactionsData?.pagination;
+  
   const deposits = depositsData?.data || [];
+  const depPagination = depositsData?.pagination;
+  
   const withdrawals = withdrawalsData?.data || [];
+  const wdPagination = withdrawalsData?.pagination;
+  
   const promotions = promotionsData?.data || [];
   const bankInfo = configData?.data?.value;
 
@@ -260,7 +283,7 @@ export default function WalletPage() {
               <Button
                 onClick={() => setWithdrawDialogOpen(true)}
                 variant="outline"
-                className="flex-1 h-12 rounded-full border-white/30 text-white hover:bg-white/10 font-bold"
+                className="flex-1 h-12 rounded-full border-white/30 text-black hover:bg-white/10 font-bold"
               >
                 <ArrowUpRight className="h-5 w-5 mr-2" /> Rút tiền về ngân hàng
               </Button>
@@ -310,14 +333,32 @@ export default function WalletPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="transactions" className="animate-fade-in">
+          <TabsContent value="transactions" className="animate-fade-in space-y-4">
             <Card className="rounded-3xl border-none shadow-sm overflow-hidden">
-              <CardHeader>
-                <CardTitle>Giao dịch gần đây</CardTitle>
-                <CardDescription>Theo dõi các hoạt động thu chi trong ví của bạn</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                    <CardTitle>Giao dịch gần đây</CardTitle>
+                    <CardDescription>Theo dõi các hoạt động thu chi trong ví của bạn</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Hiển thị:</span>
+                    <Select value={txLimit.toString()} onValueChange={(v) => { setTxLimit(Number(v)); setTxPage(1); }}>
+                        <SelectTrigger className="w-20 h-8 rounded-full border-gray-200">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="20">20</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
               </CardHeader>
               <CardContent className="p-0 sm:p-6 sm:pt-0">
-                {transactions.length === 0 ? (
+                {transactionsLoading ? (
+                    <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+                ) : transactions.length === 0 ? (
                   <div className="text-center py-12">
                       <History className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                       <p className="text-muted-foreground">Chưa có giao dịch nào</p>
@@ -325,7 +366,17 @@ export default function WalletPage() {
                 ) : (
                   <div className="divide-y divide-gray-100">
                     {transactions.map((tx: WalletTransaction) => {
-                      const typeInfo = transactionTypeLabels[tx.type] || { label: 'Khác', color: 'bg-gray-100 text-gray-700', icon: <History className="h-4 w-4" /> };
+                      let typeInfo = transactionTypeLabels[tx.type] || { label: 'Khác', color: 'bg-gray-100 text-gray-700', icon: <History className="h-4 w-4" /> };
+                      
+                      // Custom label for booking payment
+                      if (tx.type === 'payment' && tx.referenceModel === 'Booking') {
+                        typeInfo = { 
+                          label: 'Thanh toán phòng', 
+                          color: 'bg-blue-100 text-blue-700', 
+                          icon: <Building2 className="h-4 w-4" /> 
+                        };
+                      }
+
                       const isPositive = ['deposit', 'refund', 'bonus'].includes(tx.type);
                       return (
                         <div key={tx._id} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
@@ -354,16 +405,46 @@ export default function WalletPage() {
                 )}
               </CardContent>
             </Card>
+            
+            {/* Transaction Pagination */}
+            {txPagination && txPagination.totalPages > 1 && (
+                <div className="flex justify-center items-center gap-4">
+                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={txPage === 1} onClick={() => setTxPage(txPage - 1)}>
+                        <ChevronLeft className="h-4 w-4 mr-1" /> Trước
+                    </Button>
+                    <span className="text-sm font-bold text-gray-500">Trang {txPage} / {txPagination.totalPages}</span>
+                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={txPage === txPagination.totalPages} onClick={() => setTxPage(txPage + 1)}>
+                        Sau <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                </div>
+            )}
           </TabsContent>
 
-          <TabsContent value="deposits" className="animate-fade-in">
+          <TabsContent value="deposits" className="animate-fade-in space-y-4">
             <Card className="rounded-3xl border-none shadow-sm overflow-hidden">
-              <CardHeader>
-                <CardTitle>Yêu cầu nạp tiền</CardTitle>
-                <CardDescription>Trạng thái các yêu cầu nạp tiền đang xử lý</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                    <CardTitle>Yêu cầu nạp tiền</CardTitle>
+                    <CardDescription>Trạng thái các yêu cầu nạp tiền đang xử lý</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Hiển thị:</span>
+                    <Select value={depLimit.toString()} onValueChange={(v) => { setDepLimit(Number(v)); setDepPage(1); }}>
+                        <SelectTrigger className="w-20 h-8 rounded-full border-gray-200">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="20">20</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
               </CardHeader>
               <CardContent className="p-0 sm:p-6 sm:pt-0">
-                {deposits.length === 0 ? (
+                {depositsLoading ? (
+                    <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+                ) : deposits.length === 0 ? (
                   <div className="text-center py-12">
                       <Plus className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                       <p className="text-muted-foreground">Chưa có yêu cầu nạp tiền nào</p>
@@ -384,6 +465,11 @@ export default function WalletPage() {
                                 <p className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full inline-block">+{formatCurrency(deposit.bonusAmount)} quà tặng</p>
                               )}
                               <p className="text-[10px] text-gray-400 mt-1">{formatDate(deposit.createdAt)}</p>
+                              {deposit.adminNote && (
+                                <p className={`text-xs mt-1 italic ${deposit.status === 'rejected' ? 'text-red-500' : 'text-blue-500'}`}>
+                                  Ghi chú: {deposit.adminNote}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <Badge className={`${statusInfo.color} border-none px-3 py-1 rounded-full text-xs font-bold`}>{statusInfo.label}</Badge>
@@ -394,16 +480,46 @@ export default function WalletPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Deposit Pagination */}
+            {depPagination && depPagination.totalPages > 1 && (
+                <div className="flex justify-center items-center gap-4">
+                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={depPage === 1} onClick={() => setDepPage(depPage - 1)}>
+                        <ChevronLeft className="h-4 w-4 mr-1" /> Trước
+                    </Button>
+                    <span className="text-sm font-bold text-gray-500">Trang {depPage} / {depPagination.totalPages}</span>
+                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={depPage === depPagination.totalPages} onClick={() => setDepPage(depPage + 1)}>
+                        Sau <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                </div>
+            )}
           </TabsContent>
 
-          <TabsContent value="withdrawals" className="animate-fade-in">
+          <TabsContent value="withdrawals" className="animate-fade-in space-y-4">
             <Card className="rounded-3xl border-none shadow-sm overflow-hidden">
-              <CardHeader>
-                <CardTitle>Yêu cầu rút tiền</CardTitle>
-                <CardDescription>Danh sách các yêu cầu rút tiền về ngân hàng</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                    <CardTitle>Yêu cầu rút tiền</CardTitle>
+                    <CardDescription>Danh sách các yêu cầu rút tiền về ngân hàng</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Hiển thị:</span>
+                    <Select value={wdLimit.toString()} onValueChange={(v) => { setWdLimit(Number(v)); setWdPage(1); }}>
+                        <SelectTrigger className="w-20 h-8 rounded-full border-gray-200">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="5">5</SelectItem>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="20">20</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
               </CardHeader>
               <CardContent className="p-0 sm:p-6 sm:pt-0">
-                {withdrawals.length === 0 ? (
+                {withdrawalsLoading ? (
+                    <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
+                ) : withdrawals.length === 0 ? (
                   <div className="text-center py-12">
                       <ArrowUpRight className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                       <p className="text-muted-foreground">Chưa có yêu cầu rút tiền nào</p>
@@ -424,6 +540,11 @@ export default function WalletPage() {
                                 {withdrawal.bankInfo.bankName} • {withdrawal.bankInfo.accountNumber}
                               </p>
                               <p className="text-[10px] text-gray-400 mt-1">{formatDate(withdrawal.createdAt)}</p>
+                              {withdrawal.adminNote && (
+                                <p className={`text-xs mt-1 italic ${withdrawal.status === 'rejected' ? 'text-red-500' : 'text-blue-500'}`}>
+                                  Ghi chú: {withdrawal.adminNote}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <Badge className={`${statusInfo.color} border-none px-3 py-1 rounded-full text-xs font-bold`}>{statusInfo.label}</Badge>
@@ -434,6 +555,19 @@ export default function WalletPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Withdrawal Pagination */}
+            {wdPagination && wdPagination.totalPages > 1 && (
+                <div className="flex justify-center items-center gap-4">
+                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={wdPage === 1} onClick={() => setWdPage(wdPage - 1)}>
+                        <ChevronLeft className="h-4 w-4 mr-1" /> Trước
+                    </Button>
+                    <span className="text-sm font-bold text-gray-500">Trang {wdPage} / {wdPagination.totalPages}</span>
+                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={wdPage === wdPagination.totalPages} onClick={() => setWdPage(wdPage + 1)}>
+                        Sau <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                </div>
+            )}
           </TabsContent>
         </Tabs>
 

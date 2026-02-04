@@ -9,12 +9,16 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
+import { Badge } from '@/components/ui/badge';
 
 import { userService } from '@/services/userService';
 import { hotelService } from '@/services/hotelService';
 import { serviceService } from '@/services/serviceService';
 import { bookingService } from '@/services/bookingService';
 import type { User, Hotel, Room, Service, AdminBookingFormData } from '@/types';
+
+import { toast } from '@/hooks/use-toast';
 
 export default function CreateBookingPage() {
   const navigate = useNavigate();
@@ -34,13 +38,15 @@ export default function CreateBookingPage() {
   });
 
   const selectedHotelId = watch('hotelId');
+  const checkIn = watch('checkIn');
+  const checkOut = watch('checkOut');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [usersRes, hotelsRes, servicesRes] = await Promise.all([
-          userService.getUsers({ limit: 100 }), // Limit for MVP
-          hotelService.getHotels({ limit: 100 }),
+          userService.getUsers({ limit: 1000 }), 
+          hotelService.getHotels({ limit: 1000 }),
           serviceService.getAdminServices()
         ]);
         if (usersRes.success && usersRes.data) setUsers(usersRes.data);
@@ -54,20 +60,36 @@ export default function CreateBookingPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedHotelId) {
-      const fetchRooms = async () => {
+    const fetchRooms = async () => {
+        if (!selectedHotelId) {
+            setRooms([]);
+            return;
+        }
+
         try {
-          const res = await hotelService.getRooms(selectedHotelId, { limit: 100 });
-          if (res.success && res.data) setRooms(res.data);
+            if (checkIn && checkOut) {
+                // Fetch available rooms with availability status
+                const res = await hotelService.getAvailableRooms(
+                    selectedHotelId,
+                    checkIn,
+                    checkOut
+                );
+                if (res.success && res.data) setRooms(res.data);
+            } else {
+                // Just fetch all rooms if dates not selected (fallback, though validation should prevent this)
+                // Or maybe clear rooms until dates are picked?
+                // Let's fetch basic list but without availability info they might not be select-able if we enforce logic
+                // But for admin, maybe we show all but mark availability unknown?
+                // Better UX: Show all rooms from getRooms but availability is unknown
+                const res = await hotelService.getRooms(selectedHotelId, { limit: 100 });
+                if (res.success && res.data) setRooms(res.data);
+            }
         } catch (error) {
             console.error('Failed to fetch rooms');
         }
-      };
-      fetchRooms();
-    } else {
-        setRooms([]);
-    }
-  }, [selectedHotelId]);
+    };
+    fetchRooms();
+  }, [selectedHotelId, checkIn, checkOut]);
 
   const handleServiceToggle = (serviceId: string, checked: boolean) => {
     setSelectedServices(prev => {
@@ -82,6 +104,15 @@ export default function CreateBookingPage() {
   };
 
   const onSubmit = async (data: AdminBookingFormData) => {
+    if (new Date(data.checkIn) >= new Date(data.checkOut)) {
+        toast({
+            title: 'Lỗi',
+            description: 'Ngày check-out phải sau ngày check-in',
+            variant: 'destructive'
+        });
+        return;
+    }
+
     try {
       setLoading(true);
       const formattedServices = Object.entries(selectedServices).map(([serviceId, quantity]) => ({
@@ -105,6 +136,36 @@ export default function CreateBookingPage() {
     }
   };
 
+  const userItems: ComboboxItem[] = users.map(u => ({
+    value: u._id,
+    label: `${u.fullName} (${u.email})`,
+  }));
+
+  const hotelItems: ComboboxItem[] = hotels.map(h => ({
+    value: h._id,
+    label: h.name,
+  }));
+
+  const roomItems: ComboboxItem[] = rooms.map(r => {
+      const isAvailable = r.isAvailable !== false; // Default to true if undefined (e.g. initial load without dates)
+      // Actually getAvailableRooms returns isAvailable boolean. 
+      // If we use getRooms, isAvailable is undefined.
+      // We should disable if isAvailable is specifically false.
+      
+      // If dates are not selected, we can't really know availability.
+      // But let's assume if we fetched via getAvailableRooms, we rely on that.
+      
+      const disabled = !checkIn || !checkOut ? false : !isAvailable;
+      const note = disabled ? 'Đã hết phòng' : `${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(r.price)} - Còn ${r.availableQuantity !== undefined ? r.availableQuantity : '?'} phòng`;
+
+      return {
+        value: r._id,
+        label: r.name,
+        disabled: disabled,
+        note: note
+      };
+  });
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <h2 className="text-3xl font-bold tracking-tight">Tạo đặt phòng mới (Admin)</h2>
@@ -116,7 +177,7 @@ export default function CreateBookingPage() {
         <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 
-                {/* User Select */}
+                {/* User Select - Combobox */}
                 <div className="space-y-2">
                     <Label>Khách hàng</Label>
                     <Controller
@@ -124,21 +185,19 @@ export default function CreateBookingPage() {
                         control={control}
                         rules={{ required: true }}
                         render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Chọn khách hàng" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {users.map(u => (
-                                        <SelectItem key={u._id} value={u._id}>{u.fullName} ({u.email})</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Combobox
+                                items={userItems}
+                                value={field.value}
+                                onChange={field.onChange}
+                                placeholder="Tìm kiếm và chọn khách hàng..."
+                                searchPlaceholder="Nhập tên hoặc email..."
+                                emptyText="Không tìm thấy khách hàng."
+                            />
                         )}
                     />
                 </div>
 
-                {/* Hotel Select */}
+                {/* Hotel Select - Combobox */}
                 <div className="space-y-2">
                     <Label>Khách sạn</Label>
                     <Controller
@@ -146,38 +205,17 @@ export default function CreateBookingPage() {
                         control={control}
                         rules={{ required: true }}
                         render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Chọn khách sạn" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {hotels.map(h => (
-                                        <SelectItem key={h._id} value={h._id}>{h.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    />
-                </div>
-
-                {/* Room Select */}
-                <div className="space-y-2">
-                    <Label>Phòng</Label>
-                    <Controller
-                        name="roomId"
-                        control={control}
-                        rules={{ required: true }}
-                        render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value} disabled={!selectedHotelId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Chọn phòng" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {rooms.map(r => (
-                                        <SelectItem key={r._id} value={r._id}>{r.name} - {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(r.price)}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Combobox
+                                items={hotelItems}
+                                value={field.value}
+                                onChange={(val) => {
+                                    field.onChange(val);
+                                    setValue('roomId', ''); // Reset room when hotel changes
+                                }}
+                                placeholder="Tìm kiếm và chọn khách sạn..."
+                                searchPlaceholder="Nhập tên khách sạn..."
+                                emptyText="Không tìm thấy khách sạn."
+                            />
                         )}
                     />
                 </div>
@@ -192,6 +230,40 @@ export default function CreateBookingPage() {
                         <Label>Check Out</Label>
                         <Input type="date" {...register('checkOut', { required: true })} />
                     </div>
+                </div>
+
+                {/* Room Select - Combobox */}
+                <div className="space-y-2">
+                    <Label>Phòng</Label>
+                    <div className="text-xs text-muted-foreground mb-2">
+                        {!selectedHotelId ? "Vui lòng chọn khách sạn trước." : (!checkIn || !checkOut ? "Vui lòng chọn ngày để kiểm tra phòng trống." : "")}
+                    </div>
+                    <Controller
+                        name="roomId"
+                        control={control}
+                        rules={{ required: true }}
+                        render={({ field }) => (
+                            <Combobox
+                                items={roomItems}
+                                value={field.value}
+                                onChange={field.onChange}
+                                placeholder="Chọn phòng..."
+                                searchPlaceholder="Tìm tên phòng..."
+                                emptyText="Không tìm thấy phòng phù hợp."
+                                disabled={!selectedHotelId}
+                                renderItem={(item) => (
+                                    <div className="flex justify-between w-full items-center">
+                                        <div className="flex flex-col">
+                                            <span>{item.label}</span>
+                                            <span className="text-xs text-muted-foreground">{item.note}</span>
+                                        </div>
+                                        {item.disabled && <Badge variant="destructive" className="ml-2 h-5">Hết phòng</Badge>}
+                                        {!item.disabled && item.note?.includes('Còn') && <Badge variant="secondary" className="ml-2 h-5 bg-green-100 text-green-700 hover:bg-green-100">Còn trống</Badge>}
+                                    </div>
+                                )}
+                            />
+                        )}
+                    />
                 </div>
 
                 {/* Guests */}

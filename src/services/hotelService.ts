@@ -50,6 +50,11 @@ export const hotelService = {
     return data;
   },
 
+  async recalculatePriceRanges(): Promise<ApiResponse> {
+    const { data } = await api.post<ApiResponse>('/hotels/recalculate-prices');
+    return data;
+  },
+
   async uploadHotelImages(id: string, images: File[]): Promise<ApiResponse<Hotel>> {
     const formData = new FormData();
     images.forEach((image) => formData.append('images', image));
@@ -60,7 +65,13 @@ export const hotelService = {
   },
 
   // Rooms
-  async getRooms(hotelId: string, params?: { page?: number; limit?: number }): Promise<RoomsResponse> {
+  async getRooms(hotelId: string, params?: { 
+    page?: number; 
+    limit?: number;
+    search?: string;
+    category?: string;
+    isActive?: string;
+  }): Promise<RoomsResponse> {
     const { data } = await api.get<RoomsResponse>(`/hotels/${hotelId}/rooms`, { params });
     return data;
   },

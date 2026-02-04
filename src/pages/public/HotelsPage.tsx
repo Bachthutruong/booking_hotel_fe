@@ -473,6 +473,7 @@ function HotelCard({ hotel }: { hotel: Hotel }) {
         <HtmlContent html={hotel.description} className="line-clamp-2 mb-3" compact />
         <div className="flex items-center justify-between">
           <div>
+            <span className="text-sm text-muted-foreground">Từ </span>
             <span className="text-lg font-bold text-primary">
               {formatPrice(hotel.priceRange.min)}
             </span>

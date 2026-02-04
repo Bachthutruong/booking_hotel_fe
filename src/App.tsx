@@ -91,6 +91,7 @@ function AppContent() {
         <Route path="/hotels/:id" element={<HotelDetailPage />} />
         
         {/* Booking Routes */}
+        <Route path="/booking/:hotelId" element={<BookingPage />} />
         <Route path="/booking/:hotelId/:roomId" element={<BookingPage />} />
         <Route path="/booking/:id/confirm" element={<BookingConfirmPage />} />
         

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { format, differenceInDays } from 'date-fns';
-import { Loader2 } from 'lucide-react';
+import { differenceInDays } from 'date-fns';
+import { Loader2, AlertCircle, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,28 +11,37 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 
 import { bookingService } from '@/services/bookingService';
 import { serviceService } from '@/services/serviceService';
+import { useAuthStore } from '@/store/authStore';
 import type { Room, Service, BookingFormData } from '@/types';
-import { toast } from '@/hooks/use-toast'; // Assuming this exists, or I'll use simple alert
 
 interface BookingFormProps {
   hotelId: string;
   room: Room;
+  initialCheckIn?: string;
+  initialCheckOut?: string;
   onSuccess?: (bookingId: string) => void;
 }
 
-export function BookingForm({ hotelId, room, onSuccess }: BookingFormProps) {
+export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, onSuccess }: BookingFormProps) {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [selectedServices, setSelectedServices] = useState<{ [key: string]: number }>({});
-  
+
   const { register, handleSubmit, watch, formState: { errors } } = useForm<BookingFormData>({
     defaultValues: {
-      guests: { adults: 1, children: 0 }
+      checkIn: initialCheckIn || '',
+      checkOut: initialCheckOut || '',
+      guests: { adults: 1, children: 0 },
+      contactInfo: {
+        fullName: user?.fullName || '',
+        email: user?.email || '',
+        phone: user?.phone || '',
+      }
     }
   });
 
@@ -159,26 +168,53 @@ export function BookingForm({ hotelId, room, onSuccess }: BookingFormProps) {
           </div>
 
           {/* Guests */}
-          <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-2">
-              <Label htmlFor="adults">Người lớn</Label>
-              <Input
-                id="adults"
-                type="number"
-                min={1}
-                max={room.capacity.adults}
-                {...register('guests.adults', { required: true, min: 1 })}
-              />
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span>Sức chứa tối đa: {room.capacity.adults} người lớn, {room.capacity.children} trẻ em</span>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="children">Trẻ em</Label>
-              <Input
-                id="children"
-                type="number"
-                min={0}
-                max={room.capacity.children}
-                {...register('guests.children', { min: 0 })}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="adults">Người lớn *</Label>
+                <Input
+                  id="adults"
+                  type="number"
+                  min={1}
+                  max={room.capacity.adults}
+                  {...register('guests.adults', {
+                    required: 'Vui lòng nhập số người lớn',
+                    min: { value: 1, message: 'Tối thiểu 1 người lớn' },
+                    max: { value: room.capacity.adults, message: `Tối đa ${room.capacity.adults} người lớn` }
+                  })}
+                />
+                {errors.guests?.adults && (
+                  <p className="text-sm text-red-500 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {errors.guests.adults.message}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">Tối đa: {room.capacity.adults}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="children">Trẻ em</Label>
+                <Input
+                  id="children"
+                  type="number"
+                  min={0}
+                  max={room.capacity.children}
+                  {...register('guests.children', {
+                    min: { value: 0, message: 'Số trẻ em không hợp lệ' },
+                    max: { value: room.capacity.children, message: `Tối đa ${room.capacity.children} trẻ em` }
+                  })}
+                />
+                {errors.guests?.children && (
+                  <p className="text-sm text-red-500 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {errors.guests.children.message}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">Tối đa: {room.capacity.children}</p>
+              </div>
             </div>
           </div>
 
