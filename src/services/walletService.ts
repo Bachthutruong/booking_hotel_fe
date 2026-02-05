@@ -157,4 +157,49 @@ export const walletService = {
     const { data } = await api.get<TransactionsResponse>('/wallet/admin/transactions', { params });
     return data;
   },
+
+  // Admin create deposit for user
+  async adminCreateDeposit(depositData: {
+    userId: string;
+    amount: number;
+    note?: string;
+    signature: string;
+  }): Promise<ApiResponse<DepositRequest>> {
+    const { data } = await api.post<ApiResponse<DepositRequest>>('/wallet/admin/deposits/create', depositData);
+    return data;
+  },
+
+  // Admin create withdrawal for user
+  // Admin create withdrawal for user
+  async adminCreateWithdrawal(withdrawalData: {
+    userId: string;
+    amount: number;
+    note?: string;
+    bankInfo?: {
+      bankName: string;
+      accountNumber: string;
+      accountName: string;
+    };
+  }): Promise<ApiResponse<WithdrawalRequest>> {
+    const { data } = await api.post<ApiResponse<WithdrawalRequest>>('/wallet/admin/withdrawals/create', withdrawalData);
+    return data;
+  },
+
+  // Withdrawal confirmation methods
+  async getWithdrawalByToken(token: string): Promise<ApiResponse<WithdrawalRequest>> {
+    const { data } = await api.get<ApiResponse<WithdrawalRequest>>(`/wallet/withdrawal/token/${token}`);
+    return data;
+  },
+
+  async confirmWithdrawal(token: string, userSignature: string): Promise<ApiResponse<WithdrawalRequest>> {
+    const { data } = await api.post<ApiResponse<WithdrawalRequest>>(`/wallet/withdrawal/confirm/${token}`, {
+      userSignature,
+    });
+    return data;
+  },
+
+  async getWithdrawalDetail(id: string): Promise<ApiResponse<WithdrawalRequest>> {
+    const { data } = await api.get<ApiResponse<WithdrawalRequest>>(`/wallet/withdrawal/${id}`);
+    return data;
+  },
 };

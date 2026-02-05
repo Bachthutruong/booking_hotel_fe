@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Building2, Loader2, Mail, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff, Building2, Loader2, Mail, ArrowLeft, RefreshCw, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,10 +13,14 @@ import { useAuthStore } from '@/store/authStore';
 const registerSchema = z
   .object({
     fullName: z.string().min(2, 'Họ tên phải có ít nhất 2 ký tự'),
-    email: z.string().email('Email không hợp lệ'),
-    phone: z.string().optional(),
+    email: z.string().email('Email không hợp lệ').optional().or(z.literal('')),
+    phone: z.string().min(9, 'Số điện thoại không hợp lệ').optional().or(z.literal('')),
     password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
     confirmPassword: z.string(),
+  })
+  .refine((data) => data.email || data.phone, {
+    message: 'Vui lòng nhập Email hoặc Số điện thoại để đăng ký',
+    path: ['email'],
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Mật khẩu xác nhận không khớp',
@@ -73,19 +77,31 @@ export function RegisterPage() {
     try {
       setIsLoading(true);
       setError('');
-      const response = await authService.register({
-        email: data.email,
-        password: data.password,
+      
+      // Filter out empty strings
+      const payload = {
         fullName: data.fullName,
-        phone: data.phone,
-      });
+        password: data.password,
+        email: data.email || undefined,
+        phone: data.phone || undefined,
+      };
+
+      const response = await authService.register(payload);
       
       if (response.success) {
-        setPendingEmail(data.email);
-        setPendingFullName(data.fullName);
-        setStep('verify');
-        setCountdown(response.data?.expiresIn || 600);
-        setCanResend(false);
+        // Case 1: Requires Email Verification
+        if (response.requiresEmailVerification || (payload.email && !response.token)) {
+             setPendingEmail(payload.email!);
+             setPendingFullName(data.fullName);
+             setStep('verify');
+             setCountdown((response.data as any)?.expiresIn || 600);
+             setCanResend(false);
+        } 
+        // Case 2: Direct Login (Phone only)
+        else if (response.token && response.data) {
+             login(response.data as any, response.token);
+             navigate('/');
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đăng ký thất bại');
@@ -159,7 +175,7 @@ export function RegisterPage() {
       const response = await authService.resendVerificationCode(pendingEmail);
       
       if (response.success) {
-        setCountdown(response.data?.expiresIn || 600);
+        setCountdown((response.data as any)?.expiresIn || 600);
         setCanResend(false);
         setVerificationCode(['', '', '', '', '', '']);
         inputRefs.current[0]?.focus();
@@ -316,29 +332,42 @@ export function RegisterPage() {
                 )}
               </div>
 
+              {/* Email Input */}
               <div className="space-y-1">
                 <Label htmlFor="email" className="text-base text-muted-foreground font-normal">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  className="h-12 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base"
-                  {...register('email')}
-                  disabled={isLoading}
-                />
+                 <div className="relative">
+                    <Input
+                      id="email"
+                      type="email"
+                      className="h-12 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base"
+                      {...register('email')}
+                      disabled={isLoading}
+                      placeholder="example@gmail.com"
+                    />
+                     <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
+                 </div>
                 {errors.email && (
                   <p className="text-sm text-red-500">{errors.email.message}</p>
                 )}
               </div>
 
+               {/* Phone Input */}
               <div className="space-y-1">
-                <Label htmlFor="phone" className="text-base text-muted-foreground font-normal">Số điện thoại (tùy chọn)</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  className="h-12 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base"
-                  {...register('phone')}
-                  disabled={isLoading}
-                />
+                <Label htmlFor="phone" className="text-base text-muted-foreground font-normal">Số điện thoại</Label>
+                 <div className="relative">
+                    <Input
+                      id="phone"
+                      type="tel"
+                      className="h-12 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base"
+                      {...register('phone')}
+                      disabled={isLoading}
+                      placeholder="0987654321"
+                    />
+                    <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
+                 </div>
+                 {errors.phone && (
+                   <p className="text-sm text-red-500">{errors.phone.message}</p>
+                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">

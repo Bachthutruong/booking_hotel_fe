@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import QRCode from 'react-qr-code';
 import {
   Calendar,
   MapPin,
@@ -11,6 +12,8 @@ import {
   ChevronRight,
   Star,
   Loader2,
+  Plus,
+  QrCode,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -45,24 +48,36 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { bookingService } from '@/services/bookingService';
+import { serviceService } from '@/services/serviceService';
 import { hotelService } from '@/services/hotelService';
 import { formatPrice, getStatusText, getStatusColor, getRoomTypeText } from '@/lib/utils';
-import type { Booking, Hotel, Room } from '@/types';
+import { useToast } from '@/hooks/use-toast';
+import type { Booking, Hotel, Room, Service } from '@/types';
 
 export function BookingsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [status, setStatus] = useState<string>('');
-  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [status, setStatus] = useState<string>('confirmed'); // Default to confirmed
   const [cancelBooking, setCancelBooking] = useState<Booking | null>(null);
   const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+  const [showQRDialog, setShowQRDialog] = useState<Booking | null>(null);
+  const [showAddServiceDialog, setShowAddServiceDialog] = useState<Booking | null>(null);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [serviceQuantity, setServiceQuantity] = useState(1);
 
   const { data, isLoading } = useQuery({
     queryKey: ['myBookings', { status, page, limit }],
     queryFn: () => bookingService.getBookings({ status: status || undefined, page, limit }),
+  });
+
+  const { data: servicesData } = useQuery({
+    queryKey: ['services'],
+    queryFn: () => serviceService.getServices(),
   });
 
   const cancelMutation = useMutation({
@@ -88,8 +103,31 @@ export function BookingsPage() {
     },
   });
 
+  const addServiceMutation = useMutation({
+    mutationFn: ({ bookingId, serviceId, quantity }: { bookingId: string; serviceId: string; quantity: number }) =>
+      bookingService.addService(bookingId, serviceId, quantity),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['myBookings'] });
+      setShowAddServiceDialog(null);
+      setSelectedService(null);
+      setServiceQuantity(1);
+      toast({
+        title: 'Thêm dịch vụ thành công',
+        description: 'Dịch vụ đã được thêm vào đơn đặt phòng',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Lỗi',
+        description: error.response?.data?.message || 'Không thể thêm dịch vụ',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const bookings = data?.data || [];
   const pagination = data?.pagination;
+  const services = servicesData?.data || [];
 
   const handleSubmitReview = () => {
     if (!reviewBooking || !reviewComment.trim()) return;
@@ -102,13 +140,27 @@ export function BookingsPage() {
     });
   };
 
+  const handleAddService = () => {
+    if (!selectedService || !showAddServiceDialog) return;
+    addServiceMutation.mutate({
+      bookingId: showAddServiceDialog._id,
+      serviceId: selectedService._id,
+      quantity: serviceQuantity,
+    });
+  };
+
+  const getQRCodeUrl = (booking: Booking) => {
+    return `${window.location.origin}/my-bookings/${booking._id}`;
+  };
+
   return (
     <div className="min-h-screen animate-gradient bg-fixed">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
       <h1 className="text-2xl font-bold mb-6">Đơn đặt phòng của tôi</h1>
 
       <Tabs value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+        {/* Desktop Layout */}
+        <div className="hidden md:flex flex-wrap items-center justify-between gap-4 mb-6">
           <TabsList>
             <TabsTrigger value="">Tất cả</TabsTrigger>
             <TabsTrigger value="pending">Chờ xác nhận</TabsTrigger>
@@ -130,6 +182,93 @@ export function BookingsPage() {
               </SelectContent>
             </Select>
             <span className="text-sm text-muted-foreground">mục</span>
+          </div>
+        </div>
+
+        {/* Mobile Layout - Fixed Bottom Navigation */}
+        <div className="md:hidden mb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Hiển thị:</span>
+            <Select value={limit.toString()} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Mobile Bottom Navigation Bar - Fixed at bottom */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-lg z-50">
+          <div className="flex justify-around items-center py-2">
+            <button
+              onClick={() => { setStatus(''); setPage(1); }}
+              className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
+                status === '' ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              <span className="text-xs font-medium">Tất cả</span>
+            </button>
+            
+            <button
+              onClick={() => { setStatus('pending'); setPage(1); }}
+              className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
+                status === 'pending' ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs font-medium">Chờ</span>
+            </button>
+            
+            <button
+              onClick={() => { setStatus('confirmed'); setPage(1); }}
+              className={`flex flex-col items-center justify-center px-4 py-2 min-w-[70px] transition-colors relative ${
+                status === 'confirmed' ? 'text-white' : 'text-muted-foreground'
+              }`}
+            >
+              <div className={`absolute -top-5 w-14 h-14 rounded-full flex items-center justify-center shadow-lg ${
+                status === 'confirmed' ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'
+              }`}>
+                <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${status === 'confirmed' ? 'text-white' : 'text-muted-foreground'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <span className={`text-xs font-medium mt-6 ${status === 'confirmed' ? 'text-primary' : ''}`}>Xác nhận</span>
+            </button>
+            
+            <button
+              onClick={() => { setStatus('completed'); setPage(1); }}
+              className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
+                status === 'completed' ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-xs font-medium">Xong</span>
+            </button>
+            
+            <button
+              onClick={() => { setStatus('cancelled'); setPage(1); }}
+              className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
+                status === 'cancelled' ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span className="text-xs font-medium">Đã hủy</span>
+            </button>
           </div>
         </div>
 
@@ -181,15 +320,37 @@ export function BookingsPage() {
                               </span>
                             </div>
 
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                               <span className="text-lg font-bold text-primary">
                                 {formatPrice(booking.totalPrice)}
                               </span>
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2">
+                                {/* QR Code Button for confirmed bookings */}
+                                {booking.status === 'confirmed' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowQRDialog(booking)}
+                                  >
+                                    <QrCode className="mr-1 h-4 w-4" />
+                                    <span className="hidden sm:inline">Mã QR</span>
+                                  </Button>
+                                )}
+                                {/* Add Service Button for confirmed bookings */}
+                                {booking.status === 'confirmed' && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowAddServiceDialog(booking)}
+                                  >
+                                    <Plus className="mr-1 h-4 w-4" />
+                                    <span className="hidden sm:inline">Thêm dịch vụ</span>
+                                  </Button>
+                                )}
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setSelectedBooking(booking)}
+                                  onClick={() => navigate(`/my-bookings/${booking._id}`)}
                                 >
                                   <Eye className="mr-1 h-4 w-4" />
                                   Chi tiết
@@ -263,62 +424,100 @@ export function BookingsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Booking Detail Dialog */}
-      <Dialog open={!!selectedBooking} onOpenChange={() => setSelectedBooking(null)}>
-        <DialogContent className="max-w-md">
+      {/* QR Code Dialog */}
+      <Dialog open={!!showQRDialog} onOpenChange={() => setShowQRDialog(null)}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Chi tiết đặt phòng</DialogTitle>
+            <DialogTitle className="text-center">Mã QR đơn hàng</DialogTitle>
+            <DialogDescription className="text-center">
+              Quét mã QR để xem chi tiết đơn hàng
+            </DialogDescription>
           </DialogHeader>
-          {selectedBooking && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Mã đặt phòng</span>
-                <span className="font-medium">
-                  {selectedBooking._id.slice(-8).toUpperCase()}
-                </span>
+          {showQRDialog && (
+            <div className="flex flex-col items-center py-4">
+              <div className="bg-white p-6 rounded-lg">
+                <QRCode value={getQRCodeUrl(showQRDialog)} size={200} />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Trạng thái</span>
-                <Badge className={getStatusColor(selectedBooking.status)}>
-                  {getStatusText(selectedBooking.status)}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Thanh toán</span>
-                <Badge className={getStatusColor(selectedBooking.paymentStatus)}>
-                  {getStatusText(selectedBooking.paymentStatus)}
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Nhận phòng</span>
-                <span>{format(new Date(selectedBooking.checkIn), 'dd/MM/yyyy')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Trả phòng</span>
-                <span>{format(new Date(selectedBooking.checkOut), 'dd/MM/yyyy')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Số khách</span>
-                <span>
-                  {selectedBooking.guests.adults} người lớn
-                  {selectedBooking.guests.children > 0 &&
-                    `, ${selectedBooking.guests.children} trẻ em`}
-                </span>
-              </div>
-              <div className="flex items-center justify-between font-semibold">
-                <span>Tổng tiền</span>
-                <span className="text-primary">
-                  {formatPrice(selectedBooking.totalPrice)}
-                </span>
-              </div>
-              {selectedBooking.specialRequests && (
-                <div>
-                  <span className="text-muted-foreground text-sm">Yêu cầu đặc biệt:</span>
-                  <p className="text-sm mt-1">{selectedBooking.specialRequests}</p>
-                </div>
-              )}
+              <p className="text-sm text-muted-foreground text-center mt-4">
+                Mã đơn: #{showQRDialog._id.slice(-8).toUpperCase()}
+              </p>
+              <Button
+                className="mt-4"
+                onClick={() => {
+                  navigate(`/my-bookings/${showQRDialog._id}`);
+                  setShowQRDialog(null);
+                }}
+              >
+                Xem chi tiết
+              </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Service Dialog */}
+      <Dialog open={!!showAddServiceDialog} onOpenChange={() => setShowAddServiceDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Thêm dịch vụ</DialogTitle>
+            <DialogDescription>
+              Chọn dịch vụ bạn muốn thêm vào đơn đặt phòng
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[400px] overflow-y-auto">
+            {services.map((service) => (
+              <div
+                key={service._id}
+                className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                  selectedService?._id === service._id
+                    ? 'border-primary bg-primary/5'
+                    : 'hover:border-primary/50'
+                }`}
+                onClick={() => setSelectedService(service)}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">{service.name}</h4>
+                    <p className="text-sm text-muted-foreground">{service.description}</p>
+                  </div>
+                  <p className="font-semibold text-primary">{formatPrice(service.price)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {selectedService && (
+            <div className="flex items-center justify-center gap-4 py-4 border-t">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setServiceQuantity(Math.max(1, serviceQuantity - 1))}
+              >
+                -
+              </Button>
+              <span className="text-xl font-bold w-12 text-center">{serviceQuantity}</span>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setServiceQuantity(serviceQuantity + 1)}
+              >
+                +
+              </Button>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddServiceDialog(null)}>
+              Hủy
+            </Button>
+            <Button
+              onClick={handleAddService}
+              disabled={!selectedService || addServiceMutation.isPending}
+            >
+              {addServiceMutation.isPending && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              Thêm ({selectedService ? formatPrice(selectedService.price * serviceQuantity) : ''})
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

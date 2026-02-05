@@ -11,7 +11,7 @@ import { authService } from '@/services/authService';
 import { useAuthStore } from '@/store/authStore';
 
 const loginSchema = z.object({
-  email: z.string().email('Email không hợp lệ'),
+  identifier: z.string().min(1, 'Vui lòng nhập Email hoặc Số điện thoại'),
   password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
 });
 
@@ -39,11 +39,20 @@ export function LoginPage() {
     try {
       setIsLoading(true);
       setError('');
-      const response = await authService.login(data);
+      // Send both potential keys to backend or just identifier if backend supports it
+      const response = await authService.login({
+         ...data,
+      });
       login(response.data, response.token);
       navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại');
+      if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        const identifier = data.identifier;
+        if (identifier.includes('@')) {
+           // Redirect to verify email if needed, but backend handles error message well
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -81,16 +90,17 @@ export function LoginPage() {
 
             <div className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-base text-muted-foreground font-normal">Email</Label>
+                <Label htmlFor="identifier" className="text-base text-muted-foreground font-normal">Email hoặc Số điện thoại</Label>
                 <Input
-                  id="email"
-                  type="email"
+                  id="identifier"
+                  type="text"
+                  placeholder="name@example.com hoặc 09..."
                   className="h-14 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base"
-                  {...register('email')}
+                  {...register('identifier')}
                   disabled={isLoading}
                 />
-                {errors.email && (
-                  <p className="text-sm text-red-500">{errors.email.message}</p>
+                {errors.identifier && (
+                  <p className="text-sm text-red-500">{errors.identifier.message}</p>
                 )}
               </div>
 

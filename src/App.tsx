@@ -26,9 +26,11 @@ import { HotelsManagePage } from '@/pages/admin/HotelsManagePage';
 // Pages - User
 import { ProfilePage } from '@/pages/user/ProfilePage';
 import { BookingsPage } from '@/pages/user/BookingsPage';
+import BookingDetailPage from '@/pages/user/BookingDetailPage';
 import BookingPaymentPage from '@/pages/user/BookingPaymentPage';
 import WalletPage from '@/pages/WalletPage';
 import ScanServicePage from '@/pages/ScanServicePage';
+import WithdrawalConfirmPage from '@/pages/user/WithdrawalConfirmPage';
 
 // Pages - Booking
 import { BookingPage } from '@/pages/booking/BookingPage';
@@ -98,14 +100,17 @@ function AppContent() {
         {/* Protected User Routes */}
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/my-bookings" element={<BookingsPage />} />
+        <Route path="/my-bookings/:id" element={<BookingDetailPage />} />
         <Route path="/booking/:id/payment" element={<BookingPaymentPage />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/scan-service/:serviceId" element={<ScanServicePage />} />
+        <Route path="/withdraw/confirm/:token" element={<WithdrawalConfirmPage />} />
       </Route>
 
       {/* Auth Routes */}
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
+      <Route path="/login" element={<Navigate to="/auth/login" replace />} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={<AdminLayout />}>

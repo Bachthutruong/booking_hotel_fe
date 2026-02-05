@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   MapPin,
@@ -56,6 +56,7 @@ const ROOMS_PER_PAGE = 3;
 export function HotelDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated } = useAuthStore();
   const [currentImage, setCurrentImage] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -66,6 +67,24 @@ export function HotelDetailPage() {
   // Category filter and load more state
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [visibleRoomsCount, setVisibleRoomsCount] = useState(ROOMS_PER_PAGE);
+
+  // Read dates from URL params (when redirected from hotels page with single result)
+  useEffect(() => {
+    const urlCheckIn = searchParams.get('checkIn');
+    const urlCheckOut = searchParams.get('checkOut');
+    
+    if (urlCheckIn && !checkIn) {
+      setCheckIn(urlCheckIn);
+    }
+    if (urlCheckOut && !checkOut) {
+      setCheckOut(urlCheckOut);
+    }
+    
+    // If both dates are provided via URL, auto-switch to rooms tab
+    if (urlCheckIn && urlCheckOut) {
+      setActiveTab('rooms');
+    }
+  }, [searchParams]); // Only run on mount and when searchParams change
 
   // Function to check availability and switch to rooms tab
   const handleCheckAvailability = () => {

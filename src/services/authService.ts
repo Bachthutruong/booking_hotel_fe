@@ -4,7 +4,9 @@ import type { AuthResponse, LoginCredentials, RegisterData, User, ApiResponse } 
 interface RegisterResponse {
   success: boolean;
   message: string;
-  data?: {
+  requiresEmailVerification?: boolean;
+  token?: string;
+  data?: User | {
     email: string;
     expiresIn: number;
   };

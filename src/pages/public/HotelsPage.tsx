@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Search,
@@ -63,7 +63,7 @@ export function HotelsPage() {
     limit: 12,
   };
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['hotels', queryParams],
     queryFn: () => hotelService.getHotels(queryParams),
   });
@@ -72,6 +72,44 @@ export function HotelsPage() {
     queryKey: ['popularCities'],
     queryFn: () => hotelService.getPopularCities(),
   });
+
+  // Use location.key to detect navigation changes (each navigation gets a new key)
+  const location = useLocation();
+  const lastLocationKeyRef = useRef<string | undefined>(undefined);
+  const hasRedirectedForKeyRef = useRef<string | undefined>(undefined);
+
+  // Auto-redirect to hotel detail page when there's only 1 hotel result
+  useEffect(() => {
+    // Check if this is a new navigation (location.key changed)
+    const isNewNavigation = location.key !== lastLocationKeyRef.current;
+    if (isNewNavigation) {
+      lastLocationKeyRef.current = location.key;
+    }
+
+    // Only redirect if:
+    // 1. Data is loaded and not loading
+    // 2. There's exactly 1 hotel in results
+    // 3. We're on page 1
+    // 4. We haven't already redirected for this location.key
+    if (
+      !isLoading &&
+      data?.data &&
+      data.data.length === 1 &&
+      data.pagination?.total === 1 &&
+      page === 1 &&
+      hasRedirectedForKeyRef.current !== location.key
+    ) {
+      hasRedirectedForKeyRef.current = location.key;
+      const singleHotel = data.data[0];
+      // Navigate to hotel detail page with search params preserved
+      const params = new URLSearchParams();
+      if (searchParams.get('checkIn')) params.set('checkIn', searchParams.get('checkIn')!);
+      if (searchParams.get('checkOut')) params.set('checkOut', searchParams.get('checkOut')!);
+      if (searchParams.get('guests')) params.set('guests', searchParams.get('guests')!);
+      const queryString = params.toString();
+      navigate(`/hotels/${singleHotel._id}${queryString ? `?${queryString}` : ''}`, { replace: true });
+    }
+  }, [data, isLoading, page, navigate, searchParams, location.key, dataUpdatedAt]);
 
   // Update URL when filters change
   useEffect(() => {

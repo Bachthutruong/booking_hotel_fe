@@ -182,12 +182,14 @@ export interface Pagination {
 
 // Auth types
 export interface LoginCredentials {
-  email: string;
+  email?: string;
+  phone?: string;
+  identifier?: string;
   password: string;
 }
 
 export interface RegisterData {
-  email: string;
+  email?: string;
   password: string;
   fullName: string;
   phone?: string;
@@ -264,7 +266,7 @@ export interface RevenueData {
 export type TransactionType = 'deposit' | 'withdrawal' | 'payment' | 'refund' | 'bonus';
 export type TransactionStatus = 'pending' | 'approved' | 'rejected' | 'completed';
 export type DepositStatus = 'pending' | 'approved' | 'rejected';
-export type WithdrawalStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+export type WithdrawalStatus = 'pending' | 'pending_confirmation' | 'approved' | 'rejected' | 'completed';
 
 export interface WalletBalance {
   walletBalance: number;
