@@ -10,7 +10,6 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 
 // Pages - Public
-import { HomePage } from '@/pages/public/HomePage';
 import { HotelsPage } from '@/pages/public/HotelsPage';
 import { HotelDetailPage } from '@/pages/public/HotelDetailPage';
 
@@ -86,22 +85,22 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Public Routes */}
+      {/* Public Routes - mặc định vào /hotels (không dùng trang chủ) */}
       <Route element={<MainLayout />}>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<Navigate to="/hotels" replace />} />
         <Route path="/hotels" element={<HotelsPage />} />
         <Route path="/hotels/:id" element={<HotelDetailPage />} />
         
-        {/* Booking Routes */}
+        {/* Booking Routes - route có path cụ thể (confirm, payment) phải đặt TRƯỚC :hotelId/:roomId để /booking/<id>/payment không bị match nhầm */}
+        <Route path="/booking/:id/confirm" element={<BookingConfirmPage />} />
+        <Route path="/booking/:id/payment" element={<BookingPaymentPage />} />
         <Route path="/booking/:hotelId" element={<BookingPage />} />
         <Route path="/booking/:hotelId/:roomId" element={<BookingPage />} />
-        <Route path="/booking/:id/confirm" element={<BookingConfirmPage />} />
         
         {/* Protected User Routes */}
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/my-bookings" element={<BookingsPage />} />
         <Route path="/my-bookings/:id" element={<BookingDetailPage />} />
-        <Route path="/booking/:id/payment" element={<BookingPaymentPage />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/scan-service/:serviceId" element={<ScanServicePage />} />
         <Route path="/withdraw/confirm/:token" element={<WithdrawalConfirmPage />} />
@@ -135,7 +134,7 @@ function AppContent() {
       </Route>
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/hotels" replace />} />
     </Routes>
   );
 }

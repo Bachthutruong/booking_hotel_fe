@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   format, 
@@ -84,7 +85,7 @@ import { hotelService } from '@/services/hotelService';
 import { toast } from '@/hooks/use-toast';
 import { formatPrice, getStatusText, getStatusColor } from '@/lib/utils';
 import { InvoicePrint } from '@/components/InvoicePrint';
-import type { Booking, Hotel, Room, User, Invoice, PaymentOption } from '@/types';
+import type { ApiResponse, Booking, Hotel, Room, User, Invoice, PaymentOption, Service } from '@/types';
 
 // Status colors for calendar
 const statusCalendarColors: Record<string, { bg: string; border: string; text: string }> = {
@@ -98,6 +99,8 @@ const statusCalendarColors: Record<string, { bg: string; border: string; text: s
 
 export function BookingsManagePage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openBookingId = searchParams.get('open');
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [calendarDate, setCalendarDate] = useState(new Date());
   
@@ -275,6 +278,51 @@ export function BookingsManagePage() {
       });
     }
   });
+
+  const [deliveringIndex, setDeliveringIndex] = useState<number | null>(null);
+
+  const markDeliveredMutation = useMutation({
+    mutationFn: ({ bookingId, serviceIndex }: { bookingId: string; serviceIndex: number }) =>
+      bookingService.markServiceDelivered(bookingId, serviceIndex),
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['adminBookings'] });
+      queryClient.invalidateQueries({ queryKey: ['adminBookingsCalendar'] });
+      queryClient.invalidateQueries({ queryKey: ['booking', variables.bookingId] });
+      const updated = (response as ApiResponse<Booking>)?.data;
+      if (updated && selectedBooking?._id === variables.bookingId) {
+        setSelectedBooking(updated);
+      }
+      setDeliveringIndex(null);
+      toast({ title: 'Thành công', description: 'Đã xác nhận bàn giao dịch vụ' });
+    },
+    onError: () => {
+      setDeliveringIndex(null);
+      toast({ title: 'Lỗi', description: 'Không thể xác nhận bàn giao', variant: 'destructive' });
+    },
+  });
+
+  const markAllDeliveredMutation = useMutation({
+    mutationFn: (bookingId: string) => bookingService.markAllServicesDelivered(bookingId),
+    onSuccess: (response, bookingId) => {
+      queryClient.invalidateQueries({ queryKey: ['adminBookings'] });
+      queryClient.invalidateQueries({ queryKey: ['adminBookingsCalendar'] });
+      queryClient.invalidateQueries({ queryKey: ['booking', bookingId] });
+      const updated = (response as ApiResponse<Booking>)?.data;
+      if (updated && selectedBooking?._id === bookingId) {
+        setSelectedBooking(updated);
+      }
+      toast({ title: 'Thành công', description: 'Đã xác nhận bàn giao tất cả dịch vụ' });
+    },
+    onError: () => toast({ title: 'Lỗi', description: 'Không thể xác nhận bàn giao tất cả', variant: 'destructive' }),
+  });
+
+  // Mở chi tiết đơn khi có query open=bookingId (từ thông báo)
+  useEffect(() => {
+    if (!openBookingId) return;
+    bookingService.getBooking(openBookingId).then((res) => {
+      if (res.success && res.data) setSelectedBooking(res.data as Booking);
+    });
+  }, [openBookingId]);
 
   const fetchBill = async (booking: Booking) => {
     try {
@@ -885,13 +933,39 @@ export function BookingsManagePage() {
       </Dialog>
 
       {/* Booking Detail Dialog */}
-      <Dialog open={!!selectedBooking} onOpenChange={() => setSelectedBooking(null)}>
+      <Dialog
+        open={!!selectedBooking}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedBooking(null);
+            setDeliveringIndex(null);
+            if (openBookingId) {
+              searchParams.delete('open');
+              setSearchParams(searchParams, { replace: true });
+            }
+          }
+        }}
+      >
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chi tiết đặt phòng</DialogTitle>
           </DialogHeader>
           {selectedBooking && (
             <div className="space-y-4">
+              {/* Khách sạn & Phòng */}
+              {(selectedBooking.hotel || selectedBooking.room) && (
+                <div className="p-3 rounded-lg bg-muted/50 border">
+                  <p className="text-muted-foreground text-sm mb-2">Khách sạn & Phòng</p>
+                  <p className="font-semibold text-foreground">{(selectedBooking.hotel as Hotel)?.name || '—'}</p>
+                  {(selectedBooking.hotel as Hotel)?.address != null && (selectedBooking.hotel as Hotel)?.city != null && (
+                    <p className="text-sm text-muted-foreground">{(selectedBooking.hotel as Hotel)?.address}, {(selectedBooking.hotel as Hotel)?.city}</p>
+                  )}
+                  <p className="text-sm mt-1">Phòng: <span className="font-medium">{(selectedBooking.room as Room)?.name || '—'}</span></p>
+                  {(selectedBooking.room as Room)?.type && (
+                    <p className="text-xs text-muted-foreground">Loại phòng: {(selectedBooking.room as Room)?.type}</p>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Mã đơn</p>
@@ -930,14 +1004,67 @@ export function BookingsManagePage() {
               </div>
 
               <div className="border-t pt-2">
-                <p className="text-muted-foreground text-sm mb-1">Dịch vụ đi kèm</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-muted-foreground text-sm">Dịch vụ đi kèm</p>
+                  {selectedBooking.services?.some((s: any) => {
+                    const requiresConfirmation = typeof s.service === 'object' && s.service && (s.service as Service).requiresConfirmation !== false;
+                    return requiresConfirmation && !s.deliveredAt;
+                  }) && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="text-xs h-7"
+                      onClick={() => markAllDeliveredMutation.mutate(selectedBooking._id)}
+                      disabled={markAllDeliveredMutation.isPending}
+                    >
+                      {markAllDeliveredMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+                      Xác nhận bàn giao tất cả
+                    </Button>
+                  )}
+                </div>
                 {selectedBooking.services && selectedBooking.services.length > 0 ? (
-                    <ul className="text-sm list-disc pl-4">
-                        {selectedBooking.services.map((s: any, idx) => (
-                             <li key={idx}>
-                                {s.service.name} (x{s.quantity}) - {formatPrice(s.price * s.quantity)}
+                    <ul className="text-sm space-y-2">
+                        {selectedBooking.services.map((s: any, idx) => {
+                          const serviceName = typeof s.service === 'object' && s.service ? (s.service as Service).name : 'Dịch vụ';
+                          const requiresConfirmation = typeof s.service === 'object' && s.service && (s.service as Service).requiresConfirmation !== false;
+                          const deliveredAt = s.deliveredAt;
+                          const addedAt = s.addedAt;
+                          const isThisDelivering = deliveringIndex === idx;
+                          return (
+                             <li key={idx} className="border rounded-md p-2 flex flex-col gap-1">
+                                <div className="flex justify-between items-start">
+                                  <span>{serviceName} (x{s.quantity}) - {formatPrice(s.price * s.quantity)}</span>
+                                  {requiresConfirmation && (
+                                    deliveredAt ? (
+                                      <Badge variant="secondary" className="text-xs shrink-0">
+                                        Đã bàn giao {format(new Date(deliveredAt), 'dd/MM HH:mm')}
+                                      </Badge>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs h-7 shrink-0"
+                                        onClick={() => {
+                                          setDeliveringIndex(idx);
+                                          markDeliveredMutation.mutate({ bookingId: selectedBooking._id, serviceIndex: idx });
+                                        }}
+                                        disabled={deliveringIndex !== null}
+                                      >
+                                        {isThisDelivering && markDeliveredMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-0.5" /> : <Check className="h-3 w-3 mr-0.5" />}
+                                        Đã bàn giao
+                                      </Button>
+                                    )
+                                  )}
+                                </div>
+                                {addedAt && (
+                                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    Thêm lúc: {format(new Date(addedAt), 'dd/MM/yyyy HH:mm')}
+                                  </p>
+                                )}
                              </li>
-                        ))}
+                          );
+                        })}
                     </ul>
                 ) : (
                     <p className="text-sm">Không có</p>
@@ -1044,33 +1171,124 @@ export function BookingsManagePage() {
 
       {/* Checkout Dialog */}
       <Dialog open={!!checkoutDialog} onOpenChange={() => { setCheckoutDialog(null); setBillData(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5" /> Checkout & Thanh toán
             </DialogTitle>
           </DialogHeader>
-          {billData && (
+          {billData && (() => {
+            const booking = billData.booking as Booking;
+            const summary = billData.summary as {
+              roomPrice: number;
+              servicePrice: number;
+              estimatedTotal: number;
+              nights: number;
+              userWalletBalance: number;
+              userBonusBalance: number;
+              paidFromWallet?: number;
+              paidFromBonus?: number;
+              totalPaid?: number;
+              amountDue?: number;
+            };
+            const totalPaid = summary.totalPaid ?? (summary.paidFromWallet ?? 0) + (summary.paidFromBonus ?? 0);
+            const amountDue = summary.amountDue ?? Math.max(0, summary.estimatedTotal - totalPaid);
+            const hotel = booking.hotel as Hotel;
+            const room = booking.room as Room;
+            return (
             <div className="space-y-4">
-              {/* Bill Summary */}
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+              {/* Thông tin đơn hàng */}
+              <div className="border rounded-lg p-3 space-y-1.5 text-sm">
+                <p className="font-medium text-foreground">Thông tin đơn hàng</p>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tiền phòng:</span>
-                  <span className="font-medium">{formatPrice(billData.summary.roomPrice)}</span>
+                  <span className="text-muted-foreground">Mã đơn:</span>
+                  <span className="font-mono">{booking._id.slice(-8).toUpperCase()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Dịch vụ:</span>
-                  <span className="font-medium">{formatPrice(billData.summary.servicePrice)}</span>
+                  <span className="text-muted-foreground">Khách hàng:</span>
+                  <span>{booking.contactInfo?.fullName || '-'}</span>
                 </div>
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>Tổng cộng:</span>
-                  <span className="text-primary">{formatPrice(billData.summary.estimatedTotal)}</span>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Khách sạn:</span>
+                  <span>{hotel?.name || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Phòng:</span>
+                  <span>{room?.name || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Check-in:</span>
+                  <span>{booking.checkIn ? format(new Date(booking.checkIn), 'dd/MM/yyyy') : '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Check-out:</span>
+                  <span>{booking.checkOut ? format(new Date(booking.checkOut), 'dd/MM/yyyy') : '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Số đêm:</span>
+                  <span>{billData.summary.nights} đêm</span>
                 </div>
               </div>
 
-              {/* User Wallet Info */}
+              {/* Chi tiết hóa đơn */}
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <p className="font-medium text-foreground">Chi tiết thanh toán</p>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tiền phòng ({billData.summary.nights} đêm):</span>
+                  <span className="font-medium">{formatPrice(billData.summary.roomPrice)}</span>
+                </div>
+                {booking.services && booking.services.length > 0 && (
+                  <>
+                    <p className="text-muted-foreground text-sm mt-2">Dịch vụ:</p>
+                    {booking.services.map((s: any, idx: number) => {
+                      const name = typeof s.service === 'object' && s.service ? (s.service as Service).name : 'Dịch vụ';
+                      const subtotal = (s.price || 0) * (s.quantity || 1);
+                      return (
+                        <div key={idx} className="flex justify-between text-sm pl-2 border-l-2 border-gray-200">
+                          <span>{name} x{s.quantity}</span>
+                          <span>{formatPrice(subtotal)}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="flex justify-between text-sm font-medium pt-0.5">
+                      <span className="text-muted-foreground">Tổng dịch vụ:</span>
+                      <span>{formatPrice(billData.summary.servicePrice)}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between text-lg font-bold border-t pt-2 mt-1">
+                  <span>Tổng cộng:</span>
+                  <span className="text-primary">{formatPrice(summary.estimatedTotal)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-green-600 border-t pt-2 mt-1">
+                  <span>Tiền đã cọc / đã thanh toán:</span>
+                  <span className="font-medium">{formatPrice(totalPaid)}</span>
+                </div>
+                {totalPaid > 0 && (
+                  <div className="pl-2 text-xs text-muted-foreground space-y-0.5">
+                    {(summary.paidFromWallet ?? booking.paidFromWallet) ? (
+                      <div className="flex justify-between">
+                        <span>Trong đó từ ví:</span>
+                        <span>{formatPrice(summary.paidFromWallet ?? booking.paidFromWallet ?? 0)}</span>
+                      </div>
+                    ) : null}
+                    {(summary.paidFromBonus ?? booking.paidFromBonus) ? (
+                      <div className="flex justify-between">
+                        <span>Trong đó từ khuyến mãi:</span>
+                        <span>{formatPrice(summary.paidFromBonus ?? booking.paidFromBonus ?? 0)}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                <div className="flex justify-between text-base font-bold text-primary border-t pt-2 mt-1">
+                  <span>Số tiền cần thanh toán:</span>
+                  <span>{formatPrice(amountDue)}</span>
+                </div>
+              </div>
+
+              {/* Số dư ví khách hàng */}
               <div className="bg-blue-50 p-4 rounded-lg space-y-2">
-                <p className="font-medium text-blue-900">Số dư ví khách hàng:</p>
+                <p className="font-medium text-blue-900">Số dư ví khách hàng</p>
                 <div className="flex justify-between text-sm">
                   <span>Số dư chính:</span>
                   <span className="font-bold">{formatPrice(billData.summary.userWalletBalance)}</span>
@@ -1083,7 +1301,7 @@ export function BookingsManagePage() {
 
               {/* Payment Option */}
               <div className="space-y-2">
-                <Label>Chọn cách thanh toán:</Label>
+                <Label>Chọn cách thanh toán</Label>
                 <Select value={paymentOption} onValueChange={(v) => setPaymentOption(v as PaymentOption)}>
                   <SelectTrigger>
                     <SelectValue />
@@ -1097,7 +1315,7 @@ export function BookingsManagePage() {
 
               {/* Checkout Note */}
               <div className="space-y-2">
-                <Label>Ghi chú (không bắt buộc):</Label>
+                <Label>Ghi chú (không bắt buộc)</Label>
                 <Input
                   placeholder="Nhập ghi chú checkout..."
                   value={checkoutNote}
@@ -1106,13 +1324,14 @@ export function BookingsManagePage() {
               </div>
 
               {/* Warning if insufficient balance */}
-              {billData.summary.estimatedTotal > billData.summary.userWalletBalance + billData.summary.userBonusBalance && (
+              {amountDue > 0 && amountDue > billData.summary.userWalletBalance + billData.summary.userBonusBalance && (
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-amber-700 text-sm">
                   ⚠️ Số dư ví không đủ để thanh toán. Khách sẽ cần thanh toán thêm bằng tiền mặt hoặc hình thức khác.
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCheckoutDialog(null); setBillData(null); }}>
               Hủy

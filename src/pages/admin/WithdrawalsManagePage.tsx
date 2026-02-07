@@ -43,13 +43,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { cn, formatPrice, formatPriceInput, parsePriceInput } from '@/lib/utils';
 import QRCode from 'react-qr-code';
 import { walletService } from '@/services/walletService';
 import { useToast } from '@/hooks/use-toast';
 import type { WithdrawalRequest, User } from '@/types';
-
-const formatCurrency = (amount: number) => amount.toLocaleString('vi-VN') + 'đ';
 
 const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('vi-VN', {
@@ -128,7 +126,7 @@ export default function WithdrawalsManagePage() {
       queryClient.invalidateQueries({ queryKey: ['adminWithdrawals'] });
       toast({
         title: 'Thành công',
-        description: 'Đã cập nhật trạng thái yêu cầu rút tiền',
+        description: 'Đã cập nhật trạng thái yêu cầu hoàn tiền',
       });
       setProcessDialogOpen(false);
       setSelectedWithdrawal(null);
@@ -161,19 +159,19 @@ export default function WithdrawalsManagePage() {
   const handleCreateWithdrawal = async () => {
     const amount = Number(withdrawalAmount);
     if (!selectedUser || !withdrawalAmount || amount < 1000) {
-      toast({ title: 'Lỗi', description: 'Vui lòng chọn người dùng và nhập số tiền >= 1,000đ', variant: 'destructive' });
+      toast({ title: 'Lỗi', description: 'Vui lòng chọn người dùng và nhập số tiền >= 10,000đ', variant: 'destructive' });
       return;
     }
 
     if (!bankName || !accountNumber || !accountName) {
-      toast({ title: 'Lỗi', description: 'Vui lòng nhập đầy đủ thông tin ngân hàng', variant: 'destructive' });
+      toast({ title: 'Lỗi', description: 'Vui lòng nhập đầy đủ thông tin tài khoản', variant: 'destructive' });
       return;
     }
 
     if (selectedUser.walletBalance < amount) {
       toast({ 
-        title: 'Số dư không đủ', 
-        description: `Người dùng ${selectedUser.fullName} chỉ có ${formatCurrency(selectedUser.walletBalance)}`, 
+        title: 'Số dư ví không đủ', 
+        description: `Người dùng ${selectedUser.fullName} chỉ có ${formatPrice(selectedUser.walletBalance)}`, 
         variant: 'destructive' 
       });
       return;
@@ -206,7 +204,7 @@ export default function WithdrawalsManagePage() {
     } catch (error: any) {
       toast({
         title: 'Lỗi',
-        description: error.response?.data?.message || 'Không thể tạo lệnh rút tiền',
+        description: error.response?.data?.message || 'Không thể tạo lệnh hoàn tiền',
         variant: 'destructive',
       });
     } finally {
@@ -227,12 +225,12 @@ export default function WithdrawalsManagePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Quản lý rút tiền</h1>
-          <p className="text-muted-foreground">Xử lý các yêu cầu rút tiền từ ví khách hàng</p>
+          <h1 className="text-2xl font-bold">Quản lý hoàn tiền</h1>
+          <p className="text-muted-foreground">Xử lý các yêu cầu hoàn tiền từ ví khách hàng</p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} className="bg-orange-600 hover:bg-orange-700">
           <Plus className="h-4 w-4 mr-2" />
-          Rút tiền cho người dùng
+          Hoàn tiền cho người dùng
         </Button>
       </div>
 
@@ -267,7 +265,7 @@ export default function WithdrawalsManagePage() {
           {isLoading ? (
             <div className="text-center py-8">Đang tải...</div>
           ) : withdrawals.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">Không có yêu cầu rút tiền nào</div>
+            <div className="text-center py-8 text-muted-foreground">Không có yêu cầu hoàn tiền nào</div>
           ) : (
             <>
               <Table>
@@ -295,7 +293,7 @@ export default function WithdrawalsManagePage() {
                           </div>
                         </TableCell>
                         <TableCell className="font-semibold text-red-600">
-                          -{formatCurrency(withdrawal.amount)}
+                          -{formatPrice(withdrawal.amount)}
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
@@ -408,7 +406,7 @@ export default function WithdrawalsManagePage() {
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Chi tiết yêu cầu rút tiền</DialogTitle>
+            <DialogTitle>Chi tiết yêu cầu hoàn tiền</DialogTitle>
           </DialogHeader>
           {selectedWithdrawal && (
             <div className="space-y-4">
@@ -418,15 +416,15 @@ export default function WithdrawalsManagePage() {
                   <p className="font-medium">{(selectedWithdrawal.user as User)?.fullName}</p>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">Số tiền rút</Label>
-                  <p className="font-semibold text-lg text-red-600">{formatCurrency(selectedWithdrawal.amount)}</p>
+                  <Label className="text-muted-foreground">Số tiền hoàn</Label>
+                  <p className="font-semibold text-lg text-red-600">{formatPrice(selectedWithdrawal.amount)}</p>
                 </div>
               </div>
 
               <div>
-                <Label className="text-muted-foreground">Thông tin ngân hàng</Label>
+                <Label className="text-muted-foreground">Thông tin tài khoản</Label>
                 <div className="p-3 bg-gray-50 rounded-lg mt-1 text-sm">
-                  <p>Ngân hàng: {selectedWithdrawal.bankInfo.bankName}</p>
+                  <p>Tên ngân hàng: {selectedWithdrawal.bankInfo.bankName}</p>
                   <p>STK: {selectedWithdrawal.bankInfo.accountNumber}</p>
                   <p>Chủ TK: {selectedWithdrawal.bankInfo.accountName}</p>
                 </div>
@@ -488,12 +486,12 @@ export default function WithdrawalsManagePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {processAction === 'approve' ? 'Duyệt yêu cầu' : processAction === 'complete' ? 'Hoàn tất rút tiền' : 'Từ chối yêu cầu'}
+              {processAction === 'approve' ? 'Duyệt yêu cầu' : processAction === 'complete' ? 'Hoàn tất hoàn tiền' : 'Từ chối yêu cầu'}
             </DialogTitle>
             <DialogDescription>
               {processAction === 'approve' ? 'Duyệt yêu cầu này để chuyển sang trạng thái chờ xử lý thanh toán.' :
                processAction === 'complete' ? 'Xác nhận đã chuyển tiền cho khách? Trạng thái sẽ chuyển thành Hoàn thành.' :
-               'Từ chối yêu cầu rút tiền này? Số tiền sẽ được hoàn lại vào ví khách hàng.'}
+               'Từ chối yêu cầu hoàn tiền này? Số tiền sẽ được hoàn lại vào ví khách hàng.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -501,7 +499,7 @@ export default function WithdrawalsManagePage() {
              <div className="space-y-4">
                <div className="p-4 bg-gray-50 rounded-lg">
                  <p className="font-medium">{(selectedWithdrawal.user as User)?.fullName}</p>
-                 <p className="font-semibold text-red-600 mt-1">Rút: {formatCurrency(selectedWithdrawal.amount)}</p>
+                 <p className="font-semibold text-red-600 mt-1">Hoàn: {formatPrice(selectedWithdrawal.amount)}</p>
                  <div className="text-sm text-muted-foreground mt-2">
                    {selectedWithdrawal.bankInfo.bankName} - {selectedWithdrawal.bankInfo.accountNumber}
                  </div>
@@ -538,10 +536,10 @@ export default function WithdrawalsManagePage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="h-5 w-5 text-orange-600" />
-              Rút tiền cho người dùng
+              Hoàn tiền cho người dùng
             </DialogTitle>
             <DialogDescription>
-              Tạo lệnh rút tiền cho người dùng. Lệnh tạo sẽ ở trạng thái chờ người dùng xác nhận.
+              Tạo lệnh hoàn tiền cho người dùng. Lệnh tạo sẽ ở trạng thái chờ người dùng xác nhận.
             </DialogDescription>
           </DialogHeader>
 
@@ -597,7 +595,7 @@ export default function WithdrawalsManagePage() {
                               <span className="text-xs text-muted-foreground">{user.email} - {user.phone}</span>
                             </div>
                             <span className="ml-auto text-xs text-muted-foreground">
-                              {formatCurrency(user.walletBalance)}
+                              {formatPrice(user.walletBalance)}
                             </span>
                           </CommandItem>
                         ))}
@@ -616,20 +614,20 @@ export default function WithdrawalsManagePage() {
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-orange-600">Số dư hiện tại</p>
-                  <p className="font-bold text-orange-800">{formatCurrency(selectedUser.walletBalance)}</p>
+                  <p className="font-bold text-orange-800">{formatPrice(selectedUser.walletBalance)}</p>
                 </div>
               </div>
             )}
 
             {/* Amount */}
              <div className="space-y-2">
-               <Label>Số tiền rút (VND) *</Label>
+               <Label>Số tiền hoàn (VND) *</Label>
                <Input
-                type="number"
-                placeholder="Nhập số tiền..."
-                value={withdrawalAmount}
-                onChange={(e) => setWithdrawalAmount(e.target.value)}
-                min={1000}
+                type="text"
+                inputMode="numeric"
+                placeholder="Nhập số tiền (tối thiểu 1.000đ)"
+                value={formatPriceInput(withdrawalAmount)}
+                onChange={(e) => setWithdrawalAmount(parsePriceInput(e.target.value))}
                />
                <p className="text-xs text-muted-foreground">Người dùng sẽ xác nhận và số tiền sẽ được trừ sau khi họ ký tên.</p>
              </div>

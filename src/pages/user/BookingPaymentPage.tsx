@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, Upload, CheckCircle, Clock, AlertCircle, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -13,8 +13,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 import { bookingService } from '@/services/bookingService';
 import { configService } from '@/services/configService';
-import { uploadService } from '@/services/uploadService';
-import type { Booking, SystemConfig } from '@/types';
+import { walletService } from '@/services/walletService';
+import { useAuthStore } from '@/store/authStore';
+import { formatPrice } from '@/lib/utils';
+import type { Booking } from '@/types';
 
 interface DepositConfig {
   type: 'percentage' | 'fixed';
@@ -24,35 +26,54 @@ interface DepositConfig {
 export default function BookingPaymentPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [booking, setBooking] = useState<Booking | null>(null);
+  const location = useLocation();
+  const bookingFromState = (location.state as { booking?: Booking })?.booking;
+  const [booking, setBooking] = useState<Booking | null>(bookingFromState ?? null);
   const [bankConfig, setBankConfig] = useState<any>(null);
   const [depositConfig, setDepositConfig] = useState<DepositConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!bookingFromState);
   const [uploading, setUploading] = useState(false);
+  const [payDepositLoading, setPayDepositLoading] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const { isAuthenticated } = useAuthStore();
+
+  // Preview ảnh khi chọn file; cleanup object URL khi đổi file hoặc unmount
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
       try {
-        const [bookingRes, bankConfigRes, depositConfigRes] = await Promise.all([
-          bookingService.getBooking(id),
-          configService.getConfig('bank_info').catch(() => ({ data: null })),
-          configService.getConfig('deposit_config').catch(() => ({ data: null }))
-        ]);
-
-        if (bookingRes.success && bookingRes.data) {
-          setBooking(bookingRes.data);
-        }
-        
-        // Bank config
-        if (bankConfigRes && (bankConfigRes as any).success && (bankConfigRes as any).data) {
-          setBankConfig((bankConfigRes as any).data.value);
-        }
-
-        // Deposit config
-        if (depositConfigRes && (depositConfigRes as any).success && (depositConfigRes as any).data) {
-          setDepositConfig((depositConfigRes as any).data.value);
+        // Khi có booking từ state (vừa tạo), không gọi getBooking để tránh 401
+        if (bookingFromState) {
+          const [bankConfigRes, depositConfigRes] = await Promise.all([
+            configService.getConfig('bank_info').catch(() => ({ data: null })),
+            configService.getConfig('deposit_config').catch(() => ({ data: null }))
+          ]);
+          if (bankConfigRes && (bankConfigRes as any).data) setBankConfig((bankConfigRes as any).data.value);
+          if (depositConfigRes && (depositConfigRes as any).data) setDepositConfig((depositConfigRes as any).data.value);
+        } else {
+          const [bookingRes, bankConfigRes, depositConfigRes] = await Promise.all([
+            bookingService.getBooking(id).catch(() => ({ success: false, data: null })),
+            configService.getConfig('bank_info').catch(() => ({ data: null })),
+            configService.getConfig('deposit_config').catch(() => ({ data: null }))
+          ]);
+          if (bookingRes?.success && bookingRes?.data) setBooking(bookingRes.data);
+          if (bankConfigRes && (bankConfigRes as any).data) setBankConfig((bankConfigRes as any).data.value);
+          if (depositConfigRes && (depositConfigRes as any).data) setDepositConfig((depositConfigRes as any).data.value);
         }
       } catch (error) {
         console.error('Failed to fetch data', error);
@@ -61,7 +82,7 @@ export default function BookingPaymentPage() {
       }
     };
     fetchData();
-  }, [id]);
+  }, [id, bookingFromState]);
 
   // Calculate deposit amount
   const calculateDepositAmount = () => {
@@ -81,9 +102,37 @@ export default function BookingPaymentPage() {
 
   const depositAmount = calculateDepositAmount();
 
+  // Lấy số dư ví khi user đã đăng nhập và đơn đang chờ cọc
+  useEffect(() => {
+    if (!isAuthenticated || booking?.status !== 'pending_deposit') return;
+    walletService.getBalance()
+      .then((res) => { if (res?.data?.walletBalance != null) setWalletBalance(res.data.walletBalance); })
+      .catch(() => setWalletBalance(null));
+  }, [isAuthenticated, booking?.status]);
+
+  const canPayDepositFromWallet = isAuthenticated && walletBalance != null && walletBalance >= depositAmount && booking?.status === 'pending_deposit';
+
+  const handlePayDepositFromWallet = async () => {
+    if (!id || !canPayDepositFromWallet) return;
+    try {
+      setPayDepositLoading(true);
+      const res = await bookingService.payDepositFromWallet(id);
+      if (res.success && res.data) {
+        setBooking(res.data);
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert(e.response?.data?.message || 'Trừ tiền cọc thất bại.');
+    } finally {
+      setPayDepositLoading(false);
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
+    } else {
+      setFile(null);
     }
   };
 
@@ -92,20 +141,16 @@ export default function BookingPaymentPage() {
 
     try {
       setUploading(true);
-      // 1. Upload image
-      const uploadRes = await uploadService.uploadImage(file);
-      
-      if (uploadRes.success && uploadRes.data) {
-        // 2. Update booking with proof
-        const bookingRes = await bookingService.uploadProof(id, uploadRes.data.url);
-        if (bookingRes.success && bookingRes.data) {
-           setBooking(bookingRes.data);
-           setFile(null);
-        }
+      // Gọi API upload-proof (không cần đăng nhập)
+      const res = await bookingService.uploadProofFile(id, file);
+      if (res.success && res.data) {
+        setBooking(res.data);
+        setFile(null);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload failed', error);
-      // alert('Upload failed');
+      const msg = error.response?.data?.message;
+      alert(msg || 'Tải ảnh lên thất bại. Vui lòng thử lại.');
     } finally {
       setUploading(false);
     }
@@ -120,7 +165,14 @@ export default function BookingPaymentPage() {
   }
 
   if (!booking) {
-    return <div className="container py-10">Booking not found</div>;
+    return (
+      <div className="container py-10 text-center">
+        <p className="text-lg text-muted-foreground mb-4">Không tìm thấy đơn đặt phòng</p>
+        <Button variant="outline" onClick={() => navigate('/hotels')}>
+          Về trang khách sạn
+        </Button>
+      </div>
+    );
   }
 
   const renderStatus = () => {
@@ -170,10 +222,6 @@ export default function BookingPaymentPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
-  };
-
   return (
     <div className="min-h-screen animate-gradient bg-fixed pb-12">
       <div className="container max-w-4xl py-10 mx-auto">
@@ -210,7 +258,7 @@ export default function BookingPaymentPage() {
                     <ul className="list-disc list-inside text-sm text-gray-600">
                         {booking.services.map((s, idx) => (
                             <li key={idx}>
-                                {(s.service as any).name} (x{s.quantity}) - {formatCurrency(s.price * s.quantity)}
+                                {(s.service as any).name} (x{s.quantity}) - {formatPrice(s.price * s.quantity)}
                             </li>
                         ))}
                     </ul>
@@ -224,7 +272,7 @@ export default function BookingPaymentPage() {
              <div className="space-y-3">
                 <div className="flex justify-between items-center text-lg">
                   <span>Tổng giá trị đơn hàng</span>
-                  <span className="font-medium">{formatCurrency(booking.totalPrice)}</span>
+                  <span className="font-medium">{formatPrice(booking.totalPrice)}</span>
                 </div>
                 
                 {/* Deposit Amount Display */}
@@ -242,12 +290,12 @@ export default function BookingPaymentPage() {
                       ) : 'Thanh toán toàn bộ'}
                     </span>
                     <span className="text-2xl font-bold text-primary">
-                      {formatCurrency(depositAmount)}
+                      {formatPrice(depositAmount)}
                     </span>
                   </div>
                   {depositAmount < booking.totalPrice && (
                     <p className="text-xs text-muted-foreground">
-                      Số tiền còn lại ({formatCurrency(booking.totalPrice - depositAmount)}) sẽ thanh toán khi nhận phòng.
+                      Số tiền còn lại ({formatPrice(booking.totalPrice - depositAmount)}) sẽ thanh toán khi nhận phòng.
                     </p>
                   )}
                 </div>
@@ -260,17 +308,45 @@ export default function BookingPaymentPage() {
           </CardContent>
         </Card>
 
-        {/* Payment / Proof Section */}
+        {/* Thanh toán / Minh chứng */}
         <div className="space-y-6">
-            {booking.status === 'pending_deposit' && (
+            {/* Nếu user đủ tiền cọc trong ví: trừ thẳng từ ví, không cần chuyển khoản */}
+            {canPayDepositFromWallet && (
+                <Card className="border-primary/30 bg-primary/5">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Banknote className="h-5 w-5 text-primary" />
+                            Thanh toán cọc bằng ví
+                        </CardTitle>
+                        <CardDescription>
+                            Số dư ví của bạn ({formatPrice(walletBalance ?? 0)}) đủ để đặt cọc {formatPrice(depositAmount)}.
+                            Xác nhận để trừ tiền từ ví, không cần chuyển khoản.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Button
+                            className="w-full"
+                            onClick={handlePayDepositFromWallet}
+                            disabled={payDepositLoading}
+                        >
+                            {payDepositLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Xác nhận trừ {formatPrice(depositAmount)} từ ví
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Thông tin chuyển khoản: luôn hiển thị khi chờ cọc / chờ duyệt */}
+            {(booking.status === 'pending_deposit' || booking.status === 'awaiting_approval') && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Thông tin chuyển khoản</CardTitle>
                         <CardDescription>
-                          Vui lòng chuyển đúng số tiền <span className="font-bold text-primary">{formatCurrency(depositAmount)}</span>
+                          Chuyển đúng số tiền <span className="font-bold text-primary">{formatPrice(depositAmount)}</span>
+                          {booking.status === 'awaiting_approval' && ' (đã gửi minh chứng, đang chờ duyệt)'}
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent>
                         {bankConfig ? (
                             <div className="space-y-4">
                                 {bankConfig.qrCode && (
@@ -285,8 +361,8 @@ export default function BookingPaymentPage() {
                                     <p><span className="font-semibold">Nội dung:</span> {booking._id.slice(-6).toUpperCase()}</p>
                                     <Separator className="my-3" />
                                     <div className="flex justify-between items-center bg-primary/10 p-3 rounded-md">
-                                      <span className="font-semibold">Số tiền cần chuyển:</span>
-                                      <span className="text-lg font-bold text-primary">{formatCurrency(depositAmount)}</span>
+                                        <span className="font-semibold">Số tiền cần chuyển:</span>
+                                        <span className="text-lg font-bold text-primary">{formatPrice(depositAmount)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -295,34 +371,62 @@ export default function BookingPaymentPage() {
                                 Vui lòng liên hệ admin để lấy thông tin chuyển khoản.
                             </div>
                         )}
+                    </CardContent>
+                </Card>
+            )}
 
-                        <Separator />
-
-                        <div className="space-y-4">
-                            <Label>Tải lên minh chứng thanh toán</Label>
-                            <Input type="file" onChange={handleFileChange} accept="image/*" />
-                            <p className="text-xs text-gray-500">Chụp màn hình giao dịch chuyển khoản thành công và tải lên.</p>
-                            
-                            <Button 
-                                className="w-full" 
-                                onClick={handleUpload} 
+            {/* Tải / thay minh chứng: khi chờ cọc luôn hiện form; khi đã có ảnh thì hiện ảnh + nút Thay ảnh */}
+            {booking.status === 'pending_deposit' && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{booking.proofImage ? 'Minh chứng đã gửi' : 'Tải lên minh chứng thanh toán'}</CardTitle>
+                        <CardDescription>
+                          Chụp màn hình giao dịch chuyển khoản thành công và tải lên.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {booking.proofImage && !file && (
+                            <div className="space-y-2">
+                                <img src={booking.proofImage} alt="Minh chứng" className="w-full max-h-64 object-contain rounded-lg border" />
+                                <p className="text-sm text-muted-foreground">Muốn gửi ảnh khác? Chọn ảnh bên dưới và bấm &quot;Xác nhận đã chuyển khoản&quot;.</p>
+                            </div>
+                        )}
+                        {/* Preview ảnh vừa chọn trước khi gửi */}
+                        {previewUrl && (
+                            <div className="space-y-2">
+                                <Label>Xem trước ảnh</Label>
+                                <img src={previewUrl} alt="Preview minh chứng" className="w-full max-h-64 object-contain rounded-lg border bg-muted/30" />
+                            </div>
+                        )}
+                        <div className="space-y-2">
+                            <Label>{booking.proofImage ? 'Thay ảnh (chọn ảnh mới)' : 'Chọn ảnh minh chứng'}</Label>
+                            <Input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileChange}
+                                className="cursor-pointer"
+                            />
+                            <Button
+                                className="w-full"
+                                onClick={handleUpload}
                                 disabled={!file || uploading}
                             >
                                 {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Xác nhận đã chuyển khoản
+                                {booking.proofImage ? 'Gửi ảnh mới (thay ảnh cọc)' : 'Xác nhận đã chuyển khoản'}
                             </Button>
                         </div>
                     </CardContent>
                 </Card>
             )}
 
-            {booking.proofImage && (
+            {booking.proofImage && booking.status === 'awaiting_approval' && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Minh chứng đã gửi</CardTitle>
+                        <CardDescription>Đang chờ admin xác nhận. Cần thay ảnh thì liên hệ hỗ trợ.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <img src={booking.proofImage} alt="Proof" className="w-full rounded-lg border" />
+                        <img src={booking.proofImage} alt="Minh chứng" className="w-full max-h-64 object-contain rounded-lg border" />
                     </CardContent>
                 </Card>
             )}

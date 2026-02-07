@@ -43,14 +43,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
+import { cn, formatPrice, formatPriceInput, parsePriceInput } from '@/lib/utils';
 import { walletService } from '@/services/walletService';
 import { promotionService } from '@/services/promotionService';
 import { useToast } from '@/hooks/use-toast';
 import type { DepositRequest, User } from '@/types';
 import SignatureCanvas from 'react-signature-canvas';
-
-const formatCurrency = (amount: number) => amount.toLocaleString('vi-VN') + 'đ';
 
 const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('vi-VN', {
@@ -170,7 +168,7 @@ export default function DepositsManagePage() {
 
       toast({
         title: 'Thành công',
-        description: `Đã nạp ${formatCurrency(Number(depositAmount))} cho ${selectedUser.fullName}`,
+        description: `Đã nạp ${formatPrice(Number(depositAmount))} cho ${selectedUser.fullName}`,
       });
 
       queryClient.invalidateQueries({ queryKey: ['adminDeposits'] });
@@ -260,10 +258,10 @@ export default function DepositsManagePage() {
                             <p className="text-sm text-muted-foreground">{user?.email}</p>
                           </div>
                         </TableCell>
-                        <TableCell className="font-semibold">{formatCurrency(deposit.amount)}</TableCell>
+                        <TableCell className="font-semibold">{formatPrice(deposit.amount)}</TableCell>
                         <TableCell>
                           {deposit.bonusAmount > 0 ? (
-                            <span className="text-amber-600">+{formatCurrency(deposit.bonusAmount)}</span>
+                            <span className="text-amber-600">+{formatPrice(deposit.bonusAmount)}</span>
                           ) : '-'}
                         </TableCell>
                         <TableCell>{formatDate(deposit.createdAt)}</TableCell>
@@ -369,9 +367,9 @@ export default function DepositsManagePage() {
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Số tiền</Label>
-                  <p className="font-semibold text-lg">{formatCurrency(selectedDeposit.amount)}</p>
+                  <p className="font-semibold text-lg">{formatPrice(selectedDeposit.amount)}</p>
                   {selectedDeposit.bonusAmount > 0 && (
-                    <p className="text-amber-600">+{formatCurrency(selectedDeposit.bonusAmount)} khuyến mãi</p>
+                    <p className="text-amber-600">+{formatPrice(selectedDeposit.bonusAmount)} khuyến mãi</p>
                   )}
                 </div>
               </div>
@@ -439,9 +437,9 @@ export default function DepositsManagePage() {
                 <p className="text-sm text-muted-foreground">Khách hàng</p>
                 <p className="font-medium">{(selectedDeposit.user as User)?.fullName}</p>
                 <p className="text-sm text-muted-foreground mt-2">Số tiền</p>
-                <p className="font-semibold text-lg">{formatCurrency(selectedDeposit.amount)}</p>
+                <p className="font-semibold text-lg">{formatPrice(selectedDeposit.amount)}</p>
                 {selectedDeposit.bonusAmount > 0 && (
-                  <p className="text-amber-600">+{formatCurrency(selectedDeposit.bonusAmount)} khuyến mãi</p>
+                  <p className="text-amber-600">+{formatPrice(selectedDeposit.bonusAmount)} khuyến mãi</p>
                 )}
               </div>
 
@@ -535,7 +533,7 @@ export default function DepositsManagePage() {
                               <span className="text-xs text-muted-foreground">{user.email} - {user.phone}</span>
                             </div>
                             <span className="ml-auto text-xs text-muted-foreground">
-                              {formatCurrency(user.walletBalance)}
+                              {formatPrice(user.walletBalance)}
                             </span>
                           </CommandItem>
                         ))}
@@ -554,7 +552,7 @@ export default function DepositsManagePage() {
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-green-600">Số dư hiện tại</p>
-                  <p className="font-bold text-green-800">{formatCurrency(selectedUser.walletBalance)}</p>
+                  <p className="font-bold text-green-800">{formatPrice(selectedUser.walletBalance)}</p>
                 </div>
               </div>
             )}
@@ -563,20 +561,20 @@ export default function DepositsManagePage() {
             <div className="space-y-2">
               <Label>Số tiền nạp (VND) *</Label>
               <Input
-                type="number"
-                placeholder="Nhập số tiền (tối thiểu 1,000đ)"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                min={1000}
+                type="text"
+                inputMode="numeric"
+                placeholder="Nhập số tiền (tối thiểu 1.000đ)"
+                value={formatPriceInput(depositAmount)}
+                onChange={(e) => setDepositAmount(parsePriceInput(e.target.value))}
               />
                {bonusPreview?.data && bonusPreview.data.bonusAmount > 0 && (
                   <div className="bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-center justify-between text-sm mt-2">
                     <span className="text-amber-700 flex items-center gap-1 font-medium">
                         <Sparkles className="h-4 w-4" /> 
-                        Khuyến mãi: +{formatCurrency(bonusPreview.data.bonusAmount)}
+                        Khuyến mãi: +{formatPrice(bonusPreview.data.bonusAmount)}
                     </span>
                     <span className="text-amber-900 font-bold">
-                        Tổng nhận: {formatCurrency(bonusPreview.data.totalReceive)}
+                        Tổng nhận: {formatPrice(bonusPreview.data.totalReceive)}
                     </span>
                   </div>
                 )}

@@ -4,16 +4,20 @@ import type { Service, ApiResponse } from '@/types';
 interface ServiceQueryParams {
   page?: number;
   limit?: number;
+  category?: string;
 }
 
 export const serviceService = {
-  async getServices(): Promise<ApiResponse<Service[]>> {
-    const { data } = await api.get<ApiResponse<Service[]>>('/services');
+  async getServices(categoryId?: string): Promise<ApiResponse<Service[]>> {
+    const params = categoryId ? { category: categoryId } : undefined;
+    const { data } = await api.get<ApiResponse<Service[]>>('/services', { params });
     return data;
   },
 
   async getAdminServices(params?: ServiceQueryParams): Promise<ApiResponse<Service[]>> {
-    const { data } = await api.get<ApiResponse<Service[]>>('/services/admin', { params });
+    const { data } = await api.get<ApiResponse<Service[]>>('/services/admin', {
+      params: { page: params?.page, limit: params?.limit, category: params?.category },
+    });
     return data;
   },
 

@@ -19,10 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { formatPrice } from '@/lib/utils';
 import { walletService } from '@/services/walletService';
 import type { User as UserType, WalletTransaction } from '@/types';
-
-const formatCurrency = (amount: number) => amount.toLocaleString('vi-VN') + 'đ';
 
 const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('vi-VN', {
@@ -36,7 +35,7 @@ const formatDate = (date: string) => {
 
 const transactionTypeLabels: Record<string, string> = {
   deposit: 'Nạp tiền',
-  withdrawal: 'Rút tiền',
+  withdrawal: 'Hoàn tiền',
   payment: 'Thanh toán',
   refund: 'Hoàn tiền',
   bonus: 'Khuyến mãi',
@@ -131,10 +130,10 @@ export default function WalletsManagePage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="font-semibold">{formatCurrency(user.walletBalance || 0)}</TableCell>
-                      <TableCell className="text-amber-600">{formatCurrency(user.bonusBalance || 0)}</TableCell>
+                      <TableCell className="font-semibold">{formatPrice(user.walletBalance || 0)}</TableCell>
+                      <TableCell className="text-amber-600">{formatPrice(user.bonusBalance || 0)}</TableCell>
                       <TableCell className="font-bold text-green-600">
-                        {formatCurrency((user.walletBalance || 0) + (user.bonusBalance || 0))}
+                        {formatPrice((user.walletBalance || 0) + (user.bonusBalance || 0))}
                       </TableCell>
                       <TableCell>
                         <Badge className={user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
@@ -207,20 +206,20 @@ export default function WalletsManagePage() {
                 <Card>
                   <CardContent className="pt-4">
                     <p className="text-sm text-muted-foreground">Số dư chính</p>
-                    <p className="text-xl font-bold">{formatCurrency(userDetails?.user?.walletBalance || 0)}</p>
+                    <p className="text-xl font-bold">{formatPrice(userDetails?.user?.walletBalance || 0)}</p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-4">
                     <p className="text-sm text-muted-foreground">Tiền khuyến mãi</p>
-                    <p className="text-xl font-bold text-amber-600">{formatCurrency(userDetails?.user?.bonusBalance || 0)}</p>
+                    <p className="text-xl font-bold text-amber-600">{formatPrice(userDetails?.user?.bonusBalance || 0)}</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-green-50">
                   <CardContent className="pt-4">
                     <p className="text-sm text-muted-foreground">Tổng cộng</p>
                     <p className="text-xl font-bold text-green-600">
-                      {formatCurrency((userDetails?.user?.walletBalance || 0) + (userDetails?.user?.bonusBalance || 0))}
+                      {formatPrice((userDetails?.user?.walletBalance || 0) + (userDetails?.user?.bonusBalance || 0))}
                     </p>
                   </CardContent>
                 </Card>
@@ -247,9 +246,9 @@ export default function WalletsManagePage() {
                             </div>
                             <div className="text-right">
                               <p className={`font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                                {isPositive ? '+' : '-'}{formatCurrency(tx.amount)}
+                                {isPositive ? '+' : '-'}{formatPrice(tx.amount)}
                               </p>
-                              <p className="text-xs text-muted-foreground">Sau: {formatCurrency(tx.balanceAfter)}</p>
+                              <p className="text-xs text-muted-foreground">Sau: {formatPrice(tx.balanceAfter)}</p>
                             </div>
                           </div>
                         );

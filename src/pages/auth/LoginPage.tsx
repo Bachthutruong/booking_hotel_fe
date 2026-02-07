@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Building2, Loader2 } from 'lucide-react';
+import { Building2, Loader2, Mail, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,8 +11,8 @@ import { authService } from '@/services/authService';
 import { useAuthStore } from '@/store/authStore';
 
 const loginSchema = z.object({
-  identifier: z.string().min(1, 'Vui lòng nhập Email hoặc Số điện thoại'),
-  password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
+  email: z.string().min(1, 'Vui lòng nhập Email').email('Email không hợp lệ'),
+  phone: z.string().min(9, 'Vui lòng nhập Số điện thoại'),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -21,7 +21,6 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuthStore();
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -39,20 +38,11 @@ export function LoginPage() {
     try {
       setIsLoading(true);
       setError('');
-      // Send both potential keys to backend or just identifier if backend supports it
-      const response = await authService.login({
-         ...data,
-      });
+      const response = await authService.login({ email: data.email, phone: data.phone });
       login(response.data, response.token);
       navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.message || 'Đăng nhập thất bại');
-      if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
-        const identifier = data.identifier;
-        if (identifier.includes('@')) {
-           // Redirect to verify email if needed, but backend handles error message well
-        }
-      }
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +60,7 @@ export function LoginPage() {
       
       <div className="w-full max-w-[448px] md:bg-white/90 md:backdrop-blur-xl md:p-10 md:rounded-[28px] md:shadow-xl md:border md:border-orange-100/50 animate-fade-in transition-all relative z-10">
         <div className="text-center mb-8">
-            <Link to="/" className="inline-flex items-center gap-2 mb-6 group">
+            <Link to="/hotels" className="inline-flex items-center gap-2 mb-6 group">
                 <div className="bg-primary/10 p-3 rounded-xl group-hover:bg-primary/20 transition-colors">
                     <Building2 className="h-8 w-8 text-primary" />
                 </div>
@@ -90,64 +80,46 @@ export function LoginPage() {
 
             <div className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="identifier" className="text-base text-muted-foreground font-normal">Email hoặc Số điện thoại</Label>
-                <Input
-                  id="identifier"
-                  type="text"
-                  placeholder="name@example.com hoặc 09..."
-                  className="h-14 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base"
-                  {...register('identifier')}
-                  disabled={isLoading}
-                />
-                {errors.identifier && (
-                  <p className="text-sm text-red-500">{errors.identifier.message}</p>
+                <Label htmlFor="email" className="text-base text-muted-foreground font-normal">Email</Label>
+                <div className="relative">
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@example.com"
+                    className="h-14 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base pr-10"
+                    {...register('email')}
+                    disabled={isLoading}
+                  />
+                  <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
+                </div>
+                {errors.email && (
+                  <p className="text-sm text-red-500">{errors.email.message}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                 <div className="flex justify-between items-center">
-                    <Label htmlFor="password" className="text-base text-muted-foreground font-normal">Mật khẩu</Label>
-                 </div>
+                <Label htmlFor="phone" className="text-base text-muted-foreground font-normal">Số điện thoại</Label>
                 <div className="relative">
                   <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    className="h-14 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base pr-12"
-                    {...register('password')}
+                    id="phone"
+                    type="tel"
+                    placeholder="0987654321"
+                    className="h-14 px-4 rounded-lg border-gray-300 focus:border-primary focus:ring-1 focus:ring-primary transition-all text-base pr-10"
+                    {...register('phone')}
                     disabled={isLoading}
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 text-muted-foreground rounded-full hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </Button>
+                  <Phone className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground opacity-50" />
                 </div>
-                {errors.password && (
-                  <p className="text-sm text-red-500">{errors.password.message}</p>
+                {errors.phone && (
+                  <p className="text-sm text-red-500">{errors.phone.message}</p>
                 )}
-                 <div className="flex justify-end pt-1">
-                     <Link
-                      to="/forgot-password"
-                      className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-                    >
-                      Quên mật khẩu?
-                    </Link>
-                 </div>
               </div>
             </div>
 
             <div className="pt-4 flex flex-col gap-4">
                  <Button type="submit" className="w-full h-12 rounded-full text-base font-medium shadow-none hover:shadow-md transition-all" disabled={isLoading}>
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Tiếp theo
+                  Đăng nhập
                 </Button>
                  <div className="text-center">
                     <Link to="/auth/register" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">

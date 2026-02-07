@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/store/authStore';
 import { authService } from '@/services/authService';
 import { walletService } from '@/services/walletService';
-import { cn } from '@/lib/utils';
+import { cn, formatPrice } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 
 export function Header() {
@@ -46,11 +46,11 @@ export function Header() {
     try {
       await authService.logout();
       logout();
-      navigate('/');
+      navigate('/hotels');
     } catch (error) {
       console.error('Logout error:', error);
       logout();
-      navigate('/');
+      navigate('/hotels');
     }
   };
 
@@ -64,7 +64,6 @@ export function Header() {
   };
 
   const navItems = [
-    { label: 'Trang chủ', href: '/' },
     { label: 'Khách sạn', href: '/hotels' },
     // { label: 'Về chúng tôi', href: '/about' },
   ];
@@ -79,7 +78,7 @@ export function Header() {
       <div className="container mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between">
           {/* Left: Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
+          <Link to="/hotels" className="flex items-center gap-2 group">
             <div className="bg-primary/10 p-2 rounded-xl group-hover:bg-primary/20 transition-colors">
               <Building2 className="h-6 w-6 text-primary" />
             </div>
@@ -126,7 +125,7 @@ export function Header() {
                   >
                     <Wallet className="h-4 w-4 text-amber-600" />
                     <span className="text-sm font-semibold text-amber-700">
-                      {walletBalance.totalBalance.toLocaleString('vi-VN')}đ
+                      {formatPrice(walletBalance.totalBalance)}
                     </span>
                   </Link>
                 )}
@@ -187,7 +186,7 @@ export function Header() {
                           <span>Ví của tôi</span>
                           {walletBalance && (
                             <span className="text-xs text-amber-600 font-semibold">
-                              {walletBalance.totalBalance.toLocaleString('vi-VN')}đ
+                              {formatPrice(walletBalance.totalBalance)}
                             </span>
                           )}
                         </div>

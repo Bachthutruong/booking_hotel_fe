@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, UserPlus, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,14 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 import { userService } from '@/services/userService';
 import { hotelService } from '@/services/hotelService';
 import { serviceService } from '@/services/serviceService';
+import { serviceCategoryService } from '@/services/serviceCategoryService';
 import { bookingService } from '@/services/bookingService';
-import type { User, Hotel, Room, Service, AdminBookingFormData } from '@/types';
+import type { User, Hotel, Room, Service, ServiceCategory, AdminBookingFormData } from '@/types';
 
 import { toast } from '@/hooks/use-toast';
+import { formatPrice } from '@/lib/utils';
 
 export default function CreateBookingPage() {
   const navigate = useNavigate();
@@ -27,7 +30,10 @@ export default function CreateBookingPage() {
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedServices, setSelectedServices] = useState<{ [key: string]: number }>({});
+  const [customerMode, setCustomerMode] = useState<'existing' | 'new'>('existing');
 
   const { register, handleSubmit, control, watch, setValue } = useForm<AdminBookingFormData>({
     defaultValues: {
@@ -44,14 +50,16 @@ export default function CreateBookingPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [usersRes, hotelsRes, servicesRes] = await Promise.all([
-          userService.getUsers({ limit: 1000 }), 
+        const [usersRes, hotelsRes, servicesRes, categoriesRes] = await Promise.all([
+          userService.getUsers({ limit: 1000 }),
           hotelService.getHotels({ limit: 1000 }),
-          serviceService.getAdminServices()
+          serviceService.getAdminServices({ limit: 500 }),
+          serviceCategoryService.getServiceCategories(),
         ]);
         if (usersRes.success && usersRes.data) setUsers(usersRes.data);
         if (hotelsRes.success && hotelsRes.data) setHotels(hotelsRes.data);
         if (servicesRes.success && servicesRes.data) setServices(servicesRes.data);
+        if (categoriesRes.success && categoriesRes.data) setCategories(categoriesRes.data);
       } catch (error) {
         console.error('Failed to fetch initial data');
       }
@@ -113,6 +121,16 @@ export default function CreateBookingPage() {
         return;
     }
 
+    if (customerMode === 'existing' && !data.userId) {
+      toast({ title: 'Lỗi', description: 'Vui lòng chọn khách hàng', variant: 'destructive' });
+      return;
+    }
+
+    if (customerMode === 'new' && (!data.contactInfo?.fullName || !data.contactInfo?.email || !data.contactInfo?.phone)) {
+      toast({ title: 'Lỗi', description: 'Vui lòng nhập đầy đủ Họ tên, Email và Số điện thoại', variant: 'destructive' });
+      return;
+    }
+
     try {
       setLoading(true);
       const formattedServices = Object.entries(selectedServices).map(([serviceId, quantity]) => ({
@@ -120,13 +138,17 @@ export default function CreateBookingPage() {
         quantity
       }));
 
-      const payload = {
+      const payload: AdminBookingFormData & { services?: { serviceId: string; quantity: number }[] } = {
         ...data,
         services: formattedServices
       };
+      if (customerMode === 'new') {
+        delete payload.userId; // Backend sẽ tìm/tạo user theo contactInfo
+      }
 
       const res = await bookingService.createAdminBooking(payload);
       if (res.success) {
+        toast({ title: 'Thành công', description: customerMode === 'new' ? 'Đã tạo đặt phòng và tài khoản khách hàng (nếu mới).' : 'Đã tạo đặt phòng.' });
         navigate('/admin/bookings');
       }
     } catch (error) {
@@ -156,7 +178,7 @@ export default function CreateBookingPage() {
       // But let's assume if we fetched via getAvailableRooms, we rely on that.
       
       const disabled = !checkIn || !checkOut ? false : !isAvailable;
-      const note = disabled ? 'Đã hết phòng' : `${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(r.price)} - Còn ${r.availableQuantity !== undefined ? r.availableQuantity : '?'} phòng`;
+      const note = disabled ? 'Đã hết phòng' : `${formatPrice(r.price)} - Còn ${r.availableQuantity !== undefined ? r.availableQuantity : '?'} phòng`;
 
       return {
         value: r._id,
@@ -177,24 +199,70 @@ export default function CreateBookingPage() {
         <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 
-                {/* User Select - Combobox */}
-                <div className="space-y-2">
+                {/* Khách hàng: Chọn có sẵn hoặc nhập mới */}
+                <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
                     <Label>Khách hàng</Label>
-                    <Controller
-                        name="userId"
-                        control={control}
-                        rules={{ required: true }}
-                        render={({ field }) => (
-                            <Combobox
-                                items={userItems}
-                                value={field.value}
-                                onChange={field.onChange}
-                                placeholder="Tìm kiếm và chọn khách hàng..."
-                                searchPlaceholder="Nhập tên hoặc email..."
-                                emptyText="Không tìm thấy khách hàng."
+                    <RadioGroup
+                        value={customerMode}
+                        onValueChange={(v: 'existing' | 'new') => {
+                          setCustomerMode(v);
+                          if (v === 'new') {
+                            setValue('userId', '');
+                          } else {
+                            setValue('contactInfo.fullName', '');
+                            setValue('contactInfo.email', '');
+                            setValue('contactInfo.phone', '');
+                          }
+                        }}
+                        className="flex flex-wrap gap-4"
+                    >
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="existing" id="customer-existing" />
+                            <Label htmlFor="customer-existing" className="flex items-center gap-1.5 cursor-pointer font-normal">
+                                <Users className="h-4 w-4" /> Chọn từ danh sách khách hàng
+                            </Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="new" id="customer-new" />
+                            <Label htmlFor="customer-new" className="flex items-center gap-1.5 cursor-pointer font-normal">
+                                <UserPlus className="h-4 w-4" /> Nhập thông tin khách mới (tự tạo tài khoản nếu chưa có)
+                            </Label>
+                        </div>
+                    </RadioGroup>
+
+                    {customerMode === 'existing' && (
+                        <div className="space-y-2">
+                            <Label>Chọn khách hàng</Label>
+                            <Controller
+                                name="userId"
+                                control={control}
+                                render={({ field }) => (
+                                    <Combobox
+                                        items={userItems}
+                                        value={field.value}
+                                        onChange={(val) => {
+                                          field.onChange(val);
+                                          const u = users.find(us => us._id === val);
+                                          if (u) {
+                                            setValue('contactInfo.fullName', u.fullName);
+                                            setValue('contactInfo.email', u.email || '');
+                                            setValue('contactInfo.phone', u.phone || '');
+                                          }
+                                        }}
+                                        placeholder="Tìm kiếm và chọn khách hàng..."
+                                        searchPlaceholder="Nhập tên hoặc email..."
+                                        emptyText="Không tìm thấy khách hàng."
+                                    />
+                                )}
                             />
-                        )}
-                    />
+                        </div>
+                    )}
+
+                    {customerMode === 'new' && (
+                        <p className="text-sm text-muted-foreground">
+                            Nhập thông tin bên dưới (Họ tên, Email, SĐT). Nếu khách chưa có tài khoản, hệ thống sẽ tự tạo tài khoản cho khách sau khi tạo đặt phòng thành công.
+                        </p>
+                    )}
                 </div>
 
                 {/* Hotel Select - Combobox */}
@@ -300,14 +368,46 @@ export default function CreateBookingPage() {
                 {/* Services */}
                 <div className="space-y-2">
                     <Label>Dịch vụ</Label>
+                    {categories.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <Badge
+                          variant={selectedCategoryId === null ? 'default' : 'outline'}
+                          className="cursor-pointer"
+                          onClick={() => setSelectedCategoryId(null)}
+                        >
+                          Tất cả
+                        </Badge>
+                        {categories.map((cat) => (
+                          <Badge
+                            key={cat._id}
+                            variant={selectedCategoryId === cat._id ? 'default' : 'outline'}
+                            className="cursor-pointer"
+                            onClick={() => setSelectedCategoryId(selectedCategoryId === cat._id ? null : cat._id)}
+                          >
+                            {cat.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                     <div className="grid gap-2 border p-4 rounded-md">
-                        {services.map(s => (
+                        {services
+                          .filter((s) => {
+                            const catId = typeof s.category === 'string' ? s.category : (s.category as ServiceCategory)?._id;
+                            if (!selectedCategoryId) return true;
+                            return catId === selectedCategoryId;
+                          })
+                          .map(s => (
                              <div key={s._id} className="flex items-center space-x-2">
                                 <Checkbox 
                                     id={`s-${s._id}`} 
                                     onCheckedChange={(c: boolean | 'indeterminate') => handleServiceToggle(s._id, c as boolean)} 
                                 />
-                                <Label htmlFor={`s-${s._id}`}>{s.name} ({new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(s.price)})</Label>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <Label htmlFor={`s-${s._id}`}>{s.name} ({formatPrice(s.price)})</Label>
+                                  {typeof s.category === 'object' && s.category && (
+                                    <Badge variant="secondary" className="text-xs">{(s.category as ServiceCategory).name}</Badge>
+                                  )}
+                                </div>
                              </div>
                         ))}
                     </div>

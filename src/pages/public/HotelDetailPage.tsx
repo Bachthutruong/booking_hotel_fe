@@ -40,7 +40,6 @@ import { HtmlContent } from '@/components/ui/HtmlContent';
 import { hotelService } from '@/services/hotelService';
 import { categoryService } from '@/services/categoryService';
 import { formatPrice, getRoomTypeText } from '@/lib/utils';
-import { useAuthStore } from '@/store/authStore';
 import type { Room, Review, RoomCategory } from '@/types';
 
 const amenityIcons: Record<string, React.ReactNode> = {
@@ -57,12 +56,11 @@ export function HotelDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { isAuthenticated } = useAuthStore();
   const [currentImage, setCurrentImage] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('rooms');
 
   // Category filter and load more state
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -163,10 +161,7 @@ export function HotelDetailPage() {
         return;
     }
 
-    if (!isAuthenticated) {
-      navigate('/auth/login', { state: { from: `/hotels/${id}` } });
-      return;
-    }
+    // Không bắt buộc đăng nhập: guest có thể đặt phòng, điền thông tin và sẽ được tạo tài khoản khi xác nhận
     navigate(`/booking/${id}/${room._id}`, {
       state: { checkIn, checkOut },
     });
@@ -233,45 +228,91 @@ export function HotelDetailPage() {
       </div>
 
       <div className="container mx-auto px-4 mt-6">
-        {/* Gallery Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[300px] md:h-[400px] lg:h-[500px] rounded-3xl overflow-hidden shadow-sm mb-8 relative group cursor-pointer" onClick={() => setLightboxOpen(true)}>
-           <div className="md:col-span-2 md:row-span-2 relative h-full">
-                <img src={hotel.images[0] || 'https://placehold.co/800x600'} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" alt="Main" />
-           </div>
-           <div className="hidden md:block relative h-full">
-                <img src={hotel.images[1] || 'https://placehold.co/400x300'} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" alt="Sub 1" />
-           </div>
-           <div className="hidden md:block relative h-full">
-                <img src={hotel.images[2] || 'https://placehold.co/400x300'} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" alt="Sub 2" />
-           </div>
-           <div className="hidden md:block relative h-full">
-                <img src={hotel.images[3] || 'https://placehold.co/400x300'} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" alt="Sub 3" />
-           </div>
-           <div className="hidden md:block relative h-full">
-                <img src={hotel.images[4] || 'https://placehold.co/400x300'} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" alt="Sub 4" />
-                 {hotel.images.length > 5 && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-medium text-lg">
-                        +{hotel.images.length - 5} ảnh
+        {/* Top: Trái = list ảnh, Phải = nội dung tổng quan — cùng chiều cao cố định */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 mb-8 h-[420px] min-h-[380px]">
+          {/* Bên trái: Chỉ hiển thị đúng số ảnh có sẵn, không khung trống */}
+          <div className="h-full flex flex-col rounded-3xl overflow-hidden min-h-0">
+            <div className="flex-1 min-h-0 grid grid-cols-2 gap-2 cursor-pointer" onClick={() => setLightboxOpen(true)}>
+              {hotel.images?.length > 0 ? (
+                <>
+                  <div className="col-span-2 sm:col-span-1 row-span-2 relative h-full min-h-[140px] sm:min-h-0">
+                    <img src={hotel.images[0]} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700 rounded-tl-xl sm:rounded-l-xl" alt="Main" />
+                  </div>
+                  {hotel.images.slice(1, 5).map((src, i) => (
+                    <div key={i} className="relative h-full min-h-[140px] hidden sm:block">
+                      <img src={src} className="w-full h-full object-cover hover:scale-105 transition-transform duration-700 rounded-xl" alt={`Ảnh ${i + 2}`} />
+                      {i === 3 && hotel.images.length > 5 && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white font-medium rounded-br-xl">
+                          +{hotel.images.length - 5} ảnh
+                        </div>
+                      )}
                     </div>
-                )}
-           </div>
-           <Button variant="secondary" size="sm" className="absolute bottom-4 right-4 rounded-full shadow-lg opacity-90 hover:opacity-100 font-medium">
+                  ))}
+                </>
+              ) : (
+                <div className="col-span-2 flex items-center justify-center bg-muted/50 rounded-xl text-muted-foreground text-sm">
+                  Chưa có ảnh
+                </div>
+              )}
+            </div>
+            {hotel.images?.length > 0 && (
+              <Button variant="secondary" size="sm" className="rounded-full shadow-lg opacity-90 hover:opacity-100 font-medium w-full sm:w-auto mt-2 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}>
                 Xem tất cả ảnh
-           </Button>
+              </Button>
+            )}
+          </div>
+
+          {/* Bên phải: Cùng chiều cao, scroll nếu dài */}
+          <div className="h-full min-h-0 bg-white/80 backdrop-blur-sm rounded-3xl p-6 lg:p-8 shadow-sm border border-border/50 flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-5 pr-1">
+              <div>
+                <h2 className="text-xl font-semibold mb-2 text-foreground">Giới thiệu</h2>
+                <HtmlContent html={hotel.description} className="text-base text-muted-foreground leading-relaxed" />
+              </div>
+              <Separator />
+              <div>
+                <h2 className="text-xl font-semibold mb-2 text-foreground">Tiện nghi nổi bật</h2>
+                <div className="grid grid-cols-2 gap-2">
+                  {hotel.amenities.map((amenity) => (
+                    <div key={amenity} className="flex items-center gap-2 p-2.5 rounded-xl bg-secondary/50">
+                      <div className="text-primary shrink-0">{amenityIcons[amenity] || <Check className="h-4 w-4" />}</div>
+                      <span className="text-sm font-medium text-foreground">{amenity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <Separator />
+              <div>
+                <h2 className="text-xl font-semibold mb-2 text-foreground">Chính sách lưu trú</h2>
+                <Card className="bg-secondary/30 border-none shadow-sm">
+                  <CardContent className="p-4 space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Nhận phòng</span>
+                      <span className="font-medium">Từ {hotel.policies.checkIn}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Trả phòng</span>
+                      <span className="font-medium">Trước {hotel.policies.checkOut}</span>
+                    </div>
+                    <Separator />
+                    <div>
+                      <span className="text-muted-foreground block mb-0.5">Chính sách hủy phòng</span>
+                      <p className="font-medium leading-relaxed">{hotel.policies.cancellation}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Overview Tabs */}
+        {/* Nội dung chính — full width (đã bỏ card sidebar) */}
+        <div className="space-y-8">
+          {/* Tab Phòng nghỉ và Đánh giá */}
+          <div className="space-y-8">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="w-full justify-start bg-transparent border-b rounded-none h-12 p-0 space-x-6">
-                <TabsTrigger 
-                    value="overview" 
-                    className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-0 text-base font-normal text-muted-foreground"
-                >
-                    Tổng quan
-                </TabsTrigger>
                 <TabsTrigger 
                     value="rooms" 
                     className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-primary px-0 text-base font-normal text-muted-foreground"
@@ -285,56 +326,6 @@ export function HotelDetailPage() {
                     Đánh giá
                 </TabsTrigger>
               </TabsList>
-
-              <TabsContent value="overview" className="space-y-8 py-6 animate-fade-in">
-                {/* Description */}
-                <div>
-                  <h2 className="text-xl font-semibold mb-4 text-foreground">Giới thiệu</h2>
-                  <HtmlContent html={hotel.description} className="text-base" />
-                </div>
-
-                <Separator />
-
-                {/* Amenities */}
-                <div>
-                  <h2 className="text-xl font-semibold mb-4 text-foreground">Tiện nghi nổi bật</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {hotel.amenities.map((amenity) => (
-                      <div key={amenity} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50">
-                        <div className="text-primary">
-                             {amenityIcons[amenity] || <Check className="h-5 w-5" />}
-                        </div>
-                        <span className="text-sm font-medium text-foreground">{amenity}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Policies */}
-                <div>
-                  <h2 className="text-xl font-semibold mb-4 text-foreground">Chính sách lưu trú</h2>
-                  <Card className="bg-white/50 border-none shadow-sm">
-                    <CardContent className="p-6 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Nhận phòng</span>
-                        <span className="font-medium">Từ {hotel.policies.checkIn}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Trả phòng</span>
-                        <span className="font-medium">Trước {hotel.policies.checkOut}</span>
-                      </div>
-                      <Separator />
-                      <div>
-                        <span className="text-muted-foreground block mb-1">Chính sách hủy phòng</span>
-                        <p className="font-medium text-sm leading-relaxed">{hotel.policies.cancellation}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
 
               <TabsContent value="rooms" id="rooms-section" className="space-y-6 py-6 animate-fade-in">
                 {/* Date Selection Inline */}
@@ -463,78 +454,6 @@ export function HotelDetailPage() {
                 )}
               </TabsContent>
             </Tabs>
-          </div>
-
-          {/* Booking Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24">
-                <Card className="rounded-[24px] shadow-lg border-none overflow-hidden">
-                    <CardHeader className="bg-primary/5 pb-4">
-                         <div className="flex justify-between items-baseline">
-                             <div>
-                                 <span className="text-sm text-muted-foreground">Giá chỉ từ</span>
-                                 <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-bold text-primary">{formatPrice(hotel.priceRange.min)}</span>
-                                    <span className="text-sm text-muted-foreground">/đêm</span>
-                                 </div>
-                             </div>
-                             <Badge variant="secondary" className="bg-white text-foreground font-normal shadow-sm">
-                                 <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 mr-1" />
-                                 {hotel.rating.toFixed(1)}
-                             </Badge>
-                         </div>
-                    </CardHeader>
-                    <CardContent className="p-6 space-y-6">
-                         <div className="space-y-4">
-                             <div className="grid grid-cols-2 gap-3">
-                                 <div className="space-y-1.5">
-                                     <Label className="text-xs uppercase text-muted-foreground font-semibold tracking-wider">Nhận phòng</Label>
-                                     <div className="relative">
-                                         <input 
-                                            id="checkIn-sidebar"
-                                            type="date" 
-                                            className="w-full bg-secondary/50 rounded-lg p-2.5 text-sm border-none focus:ring-2 focus:ring-primary outline-none"
-                                            value={checkIn}
-                                            onChange={(e) => setCheckIn(e.target.value)}
-                                            min={format(new Date(), 'yyyy-MM-dd')}
-                                         />
-                                     </div>
-                                 </div>
-                                 <div className="space-y-1.5">
-                                     <Label className="text-xs uppercase text-muted-foreground font-semibold tracking-wider">Trả phòng</Label>
-                                     <div className="relative">
-                                         <input 
-                                            type="date" 
-                                            className="w-full bg-secondary/50 rounded-lg p-2.5 text-sm border-none focus:ring-2 focus:ring-primary outline-none"
-                                            value={checkOut}
-                                            onChange={(e) => setCheckOut(e.target.value)}
-                                            min={checkIn || format(new Date(), 'yyyy-MM-dd')}
-                                         />
-                                     </div>
-                                 </div>
-                             </div>
-                         </div>
-
-                         <Button 
-                            className="w-full h-12 rounded-full text-base font-medium shadow-md hover:shadow-lg transition-all" 
-                            size="lg" 
-                            onClick={() => {
-                                if (!checkIn || !checkOut) {
-                                    document.getElementById('checkIn-sidebar')?.focus();
-                                    return;
-                                }
-                                handleCheckAvailability();
-                            }}
-                        >
-                             Kiểm tra phòng trống
-                         </Button>
-
-                         <div className="text-center">
-                             <span className="text-xs text-muted-foreground">Bạn sẽ chưa bị trừ tiền ngay đâu</span>
-                         </div>
-                    </CardContent>
-                </Card>
-            </div>
           </div>
         </div>
       </div>

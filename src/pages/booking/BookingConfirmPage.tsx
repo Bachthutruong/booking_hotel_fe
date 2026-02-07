@@ -59,7 +59,7 @@ export function BookingConfirmPage() {
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-2xl font-bold mb-4">Không tìm thấy đơn đặt phòng</h1>
         <Button asChild>
-          <Link to="/">Về trang chủ</Link>
+          <Link to="/hotels">Về trang khách sạn</Link>
         </Button>
       </div>
     );
@@ -133,15 +133,15 @@ export function BookingConfirmPage() {
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild variant="outline">
-              <Link to="/bookings">
+              <Link to="/my-bookings">
                 <Calendar className="mr-2 h-4 w-4" />
                 Xem đơn đặt phòng
               </Link>
             </Button>
             <Button asChild>
-              <Link to="/">
+              <Link to="/hotels">
                 <Home className="mr-2 h-4 w-4" />
-                Về trang chủ
+                Về trang khách sạn
               </Link>
             </Button>
           </div>

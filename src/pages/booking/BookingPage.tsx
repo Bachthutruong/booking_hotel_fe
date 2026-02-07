@@ -12,9 +12,8 @@ import { HtmlContent } from '@/components/ui/HtmlContent';
 import { hotelService } from '@/services/hotelService';
 import { categoryService } from '@/services/categoryService';
 import { BookingForm } from '@/components/booking/BookingForm';
+import { formatPrice } from '@/lib/utils';
 import type { Room, RoomCategory } from '@/types';
-
-const formatPrice = (price: number) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
 
 export function BookingPage() {
   const { hotelId, roomId } = useParams<{ hotelId: string; roomId: string }>();

@@ -1,8 +1,7 @@
 import { forwardRef } from 'react';
 import { Building2, Phone, Mail, MapPin, Calendar, User, CreditCard } from 'lucide-react';
+import { formatPrice } from '@/lib/utils';
 import type { Invoice } from '@/types';
-
-const formatCurrency = (amount: number) => amount.toLocaleString('vi-VN') + 'đ';
 
 const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('vi-VN', {
@@ -44,7 +43,7 @@ export const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
     };
 
     return (
-      <div ref={ref} className="bg-white p-8 max-w-2xl mx-auto print:p-4 print:max-w-none">
+      <div id="invoice-print" ref={ref} className="bg-white p-8 max-w-2xl mx-auto print:p-4 print:max-w-none">
         {/* Header */}
         <div className="text-center border-b pb-6 mb-6">
           <div className="flex items-center justify-center gap-2 mb-2">
@@ -148,8 +147,8 @@ export const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
                 <tr key={index} className="border-b border-gray-100">
                   <td className="py-2">{item.description}</td>
                   <td className="text-center py-2">{item.quantity}</td>
-                  <td className="text-right py-2">{formatCurrency(item.unitPrice)}</td>
-                  <td className="text-right py-2 font-medium">{formatCurrency(item.total)}</td>
+                  <td className="text-right py-2">{formatPrice(item.unitPrice)}</td>
+                  <td className="text-right py-2 font-medium">{formatPrice(item.total)}</td>
                 </tr>
               ))}
             </tbody>
@@ -160,23 +159,23 @@ export const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
         <div className="border-t pt-4">
           <div className="flex justify-between py-1">
             <span className="text-muted-foreground">Tạm tính:</span>
-            <span>{formatCurrency(invoice.subtotal)}</span>
+            <span>{formatPrice(invoice.subtotal)}</span>
           </div>
           {invoice.paidFromWallet > 0 && (
             <div className="flex justify-between py-1 text-green-600">
               <span>Thanh toán từ ví:</span>
-              <span>-{formatCurrency(invoice.paidFromWallet)}</span>
+              <span>-{formatPrice(invoice.paidFromWallet)}</span>
             </div>
           )}
           {invoice.paidFromBonus > 0 && (
             <div className="flex justify-between py-1 text-amber-600">
               <span>Sử dụng tiền khuyến mãi:</span>
-              <span>-{formatCurrency(invoice.paidFromBonus)}</span>
+              <span>-{formatPrice(invoice.paidFromBonus)}</span>
             </div>
           )}
           <div className="flex justify-between py-2 text-lg font-bold border-t mt-2">
             <span>Tổng cộng:</span>
-            <span className="text-primary">{formatCurrency(invoice.finalAmount)}</span>
+            <span className="text-primary">{formatPrice(invoice.finalAmount)}</span>
           </div>
         </div>
 

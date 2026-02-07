@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Wallet, Plus, ArrowUpRight, ArrowDownLeft, History, Gift, CreditCard, Upload, Building2, Loader2, Sparkles, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,11 +26,8 @@ import { promotionService } from '@/services/promotionService';
 import { configService } from '@/services/configService';
 import { uploadService } from '@/services/uploadService';
 import { toast } from '@/hooks/use-toast';
-import type { WalletTransaction, DepositRequest, WithdrawalRequest, PromotionConfig } from '@/types';
-
-const formatCurrency = (amount: number) => {
-  return amount.toLocaleString('vi-VN') + 'đ';
-};
+import { formatPrice, formatPriceInput, parsePriceInput } from '@/lib/utils';
+import type { WalletTransaction, PromotionConfig } from '@/types';
 
 const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString('vi-VN', {
@@ -45,7 +41,7 @@ const formatDate = (date: string) => {
 
 const transactionTypeLabels: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   deposit: { label: 'Nạp tiền', color: 'bg-green-100 text-green-700', icon: <Plus className="h-4 w-4" /> },
-  withdrawal: { label: 'Rút tiền', color: 'bg-orange-100 text-orange-700', icon: <ArrowUpRight className="h-4 w-4" /> },
+  withdrawal: { label: 'Hoàn tiền', color: 'bg-orange-100 text-orange-700', icon: <ArrowUpRight className="h-4 w-4" /> },
   payment: { label: 'Thanh toán', color: 'bg-blue-100 text-blue-700', icon: <CreditCard className="h-4 w-4" /> },
   refund: { label: 'Hoàn tiền', color: 'bg-purple-100 text-purple-700', icon: <ArrowDownLeft className="h-4 w-4" /> },
   bonus: { label: 'Khuyến mãi', color: 'bg-amber-100 text-amber-700', icon: <Gift className="h-4 w-4" /> },
@@ -80,12 +76,6 @@ export default function WalletPage() {
   // Pagination states
   const [txPage, setTxPage] = useState(1);
   const [txLimit, setTxLimit] = useState(10);
-  
-  const [depPage, setDepPage] = useState(1);
-  const [depLimit, setDepLimit] = useState(10);
-  
-  const [wdPage, setWdPage] = useState(1);
-  const [wdLimit, setWdLimit] = useState(10);
 
   // Queries
   const { data: balanceData, isLoading: balanceLoading } = useQuery({
@@ -96,16 +86,6 @@ export default function WalletPage() {
   const { data: transactionsData, isLoading: transactionsLoading } = useQuery({
     queryKey: ['walletTransactions', txPage, txLimit],
     queryFn: () => walletService.getTransactions({ page: txPage, limit: txLimit }),
-  });
-
-  const { data: depositsData, isLoading: depositsLoading } = useQuery({
-    queryKey: ['myDeposits', depPage, depLimit],
-    queryFn: () => walletService.getMyDeposits({ page: depPage, limit: depLimit }),
-  });
-
-  const { data: withdrawalsData, isLoading: withdrawalsLoading } = useQuery({
-    queryKey: ['myWithdrawals', wdPage, wdLimit],
-    queryFn: () => walletService.getMyWithdrawals({ page: wdPage, limit: wdLimit }),
   });
 
   const { data: promotionsData } = useQuery({
@@ -154,7 +134,7 @@ export default function WalletPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['myWithdrawals'] });
       queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
-      toast({ title: 'Thành công', description: 'Yêu cầu rút tiền đã được gửi. Vui lòng chờ admin duyệt.' });
+      toast({ title: 'Thành công', description: 'Yêu cầu hoàn tiền đã được gửi. Vui lòng chờ admin duyệt.' });
       setWithdrawDialogOpen(false);
       setWithdrawAmount('');
       setWithdrawBankInfo({ bankName: '', accountNumber: '', accountName: '' });
@@ -162,7 +142,7 @@ export default function WalletPage() {
     onError: (error: any) => {
       toast({
         title: 'Lỗi',
-        description: error?.response?.data?.message || 'Không thể gửi yêu cầu rút tiền',
+        description: error?.response?.data?.message || 'Không thể gửi yêu cầu hoàn tiền',
         variant: 'destructive',
       });
     },
@@ -233,14 +213,6 @@ export default function WalletPage() {
   const balance = balanceData?.data;
   const transactions = transactionsData?.data || [];
   const txPagination = transactionsData?.pagination;
-  
-  const deposits = depositsData?.data || [];
-  const depPagination = depositsData?.pagination;
-  
-  const withdrawals = withdrawalsData?.data || [];
-  console.log(withdrawals,'tetststsst');
-  const wdPagination = withdrawalsData?.pagination;
-  
   const promotions = promotionsData?.data || [];
   const bankInfo = configData?.data?.value;
 
@@ -274,20 +246,20 @@ export default function WalletPage() {
               </div>
               <div>
                 <p className="text-blue-100 text-sm font-medium">Tổng số dư</p>
-                <h2 className="text-4xl font-bold">{formatCurrency(balance?.totalBalance || 0)}</h2>
+                <h2 className="text-4xl font-bold">{formatPrice(balance?.totalBalance || 0)}</h2>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
               <div className="bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/10">
                 <p className="text-blue-100 text-xs mb-1 uppercase tracking-wider font-semibold">Số dư chính</p>
-                <p className="text-2xl font-bold">{formatCurrency(balance?.walletBalance || 0)}</p>
+                <p className="text-2xl font-bold">{formatPrice(balance?.walletBalance || 0)}</p>
               </div>
               <div className="bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/10">
                 <p className="text-blue-100 text-xs mb-1 flex items-center gap-1 uppercase tracking-wider font-semibold">
                   <Gift className="h-3.5 w-3.5" /> Tiền khuyến mãi
                 </p>
-                <p className="text-2xl font-bold">{formatCurrency(balance?.bonusBalance || 0)}</p>
+                <p className="text-2xl font-bold">{formatPrice(balance?.bonusBalance || 0)}</p>
               </div>
             </div>
 
@@ -295,7 +267,7 @@ export default function WalletPage() {
             <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/10">
               <p className="text-sm text-blue-100 text-center">
                 <Gift className="h-4 w-4 inline-block mr-2" />
-                Để nạp hoặc rút tiền, vui lòng liên hệ <span className="font-bold">Admin</span> để được hỗ trợ.
+                Để nạp hoặc hoàn tiền, vui lòng liên hệ <span className="font-bold">Admin</span> để được hỗ trợ.
               </p>
             </div>
           </CardContent>
@@ -315,11 +287,11 @@ export default function WalletPage() {
                   <div key={promo._id} className="flex flex-col justify-between p-4 bg-white rounded-2xl border border-amber-100 hover:shadow-md transition-all">
                     <div>
                       <p className="font-bold text-gray-900 line-clamp-1">{promo.name}</p>
-                      <p className="text-xs text-gray-500 mt-1">Nạp từ {formatCurrency(promo.depositAmount)}</p>
+                      <p className="text-xs text-gray-500 mt-1">Nạp từ {formatPrice(promo.depositAmount)}</p>
                     </div>
                     <div className="mt-3">
                         <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-200 border-none px-3 py-1 rounded-full text-sm font-bold">
-                        +{promo.bonusPercent ? `${promo.bonusPercent}%` : formatCurrency(promo.bonusAmount || 0)}
+                        +{promo.bonusPercent ? `${promo.bonusPercent}%` : formatPrice(promo.bonusAmount || 0)}
                         </Badge>
                     </div>
                   </div>
@@ -329,21 +301,8 @@ export default function WalletPage() {
           </Card>
         )}
 
-        {/* Tabs */}
-        <Tabs defaultValue="transactions" className="space-y-6">
-          <TabsList className="bg-white/50 backdrop-blur-md p-1 rounded-full border border-gray-200 inline-flex w-auto">
-            <TabsTrigger value="transactions" className="rounded-full px-6 py-2 data-[state=active]:bg-primary data-[state=active]:text-white">
-              Lịch sử
-            </TabsTrigger>
-             <TabsTrigger value="deposits" className="rounded-full px-6 py-2 data-[state=active]:bg-primary data-[state=active]:text-white">
-              Yêu cầu Nạp tiền
-            </TabsTrigger>
-            <TabsTrigger value="withdrawals" className="rounded-full px-6 py-2 data-[state=active]:bg-primary data-[state=active]:text-white">
-              Yêu cầu Rút tiền
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="transactions" className="animate-fade-in space-y-4">
+        {/* Lịch sử giao dịch */}
+        <div className="space-y-4">
             <Card className="rounded-3xl border-none shadow-sm overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -407,10 +366,10 @@ export default function WalletPage() {
                           <div className="flex items-center gap-3">
                             <div className="text-right">
                               <p className={`font-bold text-lg ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                                {isPositive ? '+' : '-'}{formatCurrency(tx.amount)}
+                                {isPositive ? '+' : '-'}{formatPrice(tx.amount)}
                               </p>
                               <p className="text-xs text-gray-400">
-                                Số dư: {formatCurrency(tx.balanceAfter)}
+                                Số dư: {formatPrice(tx.balanceAfter)}
                               </p>
                             </div>
                             {isWithdrawal && tx.reference && (
@@ -449,168 +408,7 @@ export default function WalletPage() {
                     </Button>
                 </div>
             )}
-          </TabsContent>
-
-          <TabsContent value="deposits" className="animate-fade-in space-y-4">
-            <Card className="rounded-3xl border-none shadow-sm overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                    <CardTitle>Yêu cầu nạp tiền</CardTitle>
-                    <CardDescription>Trạng thái các yêu cầu nạp tiền đang xử lý</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Hiển thị:</span>
-                    <Select value={depLimit.toString()} onValueChange={(v) => { setDepLimit(Number(v)); setDepPage(1); }}>
-                        <SelectTrigger className="w-20 h-8 rounded-full border-gray-200">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="5">5</SelectItem>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="20">20</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0 sm:p-6 sm:pt-0">
-                {depositsLoading ? (
-                    <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
-                ) : deposits.length === 0 ? (
-                  <div className="text-center py-12">
-                      <Plus className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                      <p className="text-muted-foreground">Chưa có yêu cầu nạp tiền nào</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {deposits.map((deposit: DepositRequest) => {
-                      const statusInfo = statusLabels[deposit.status] || { label: deposit.status, color: 'bg-gray-100 text-gray-700' };
-                      return (
-                        <div key={deposit._id} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-2xl bg-green-50">
-                              <Plus className="h-5 w-5 text-green-600" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-lg">{formatCurrency(deposit.amount)}</p>
-                              {deposit.bonusAmount > 0 && (
-                                <p className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full inline-block">+{formatCurrency(deposit.bonusAmount)} quà tặng</p>
-                              )}
-                              <p className="text-[10px] text-gray-400 mt-1">{formatDate(deposit.createdAt)}</p>
-                              {deposit.adminNote && (
-                                <p className={`text-xs mt-1 italic ${deposit.status === 'rejected' ? 'text-red-500' : 'text-blue-500'}`}>
-                                  Ghi chú: {deposit.adminNote}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <Badge className={`${statusInfo.color} border-none px-3 py-1 rounded-full text-xs font-bold`}>{statusInfo.label}</Badge>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Deposit Pagination */}
-            {depPagination && depPagination.totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4">
-                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={depPage === 1} onClick={() => setDepPage(depPage - 1)}>
-                        <ChevronLeft className="h-4 w-4 mr-1" /> Trước
-                    </Button>
-                    <span className="text-sm font-bold text-gray-500">Trang {depPage} / {depPagination.totalPages}</span>
-                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={depPage === depPagination.totalPages} onClick={() => setDepPage(depPage + 1)}>
-                        Sau <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="withdrawals" className="animate-fade-in space-y-4">
-            <Card className="rounded-3xl border-none shadow-sm overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                    <CardTitle>Yêu cầu rút tiền</CardTitle>
-                    <CardDescription>Danh sách các yêu cầu rút tiền về ngân hàng</CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Hiển thị:</span>
-                    <Select value={wdLimit.toString()} onValueChange={(v) => { setWdLimit(Number(v)); setWdPage(1); }}>
-                        <SelectTrigger className="w-20 h-8 rounded-full border-gray-200">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="5">5</SelectItem>
-                            <SelectItem value="10">10</SelectItem>
-                            <SelectItem value="20">20</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0 sm:p-6 sm:pt-0">
-                {withdrawalsLoading ? (
-                    <div className="flex justify-center py-12"><Loader2 className="animate-spin" /></div>
-                ) : withdrawals.length === 0 ? (
-                  <div className="text-center py-12">
-                      <ArrowUpRight className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                      <p className="text-muted-foreground">Chưa có yêu cầu rút tiền nào</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {withdrawals.map((withdrawal: WithdrawalRequest) => {
-                      const statusInfo = statusLabels[withdrawal.status] || { label: withdrawal.status, color: 'bg-gray-100 text-gray-700' };
-                      return (
-                        <div key={withdrawal._id} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className="p-3 rounded-2xl bg-orange-50">
-                              <ArrowUpRight className="h-5 w-5 text-orange-600" />
-                            </div>
-                            <div>
-                              <p className="font-bold text-lg">{formatCurrency(withdrawal.amount)}</p>
-                              <p className="text-xs text-gray-500">
-                                {withdrawal.bankInfo.bankName} • {withdrawal.bankInfo.accountNumber}
-                              </p>
-                              <p className="text-[10px] text-gray-400 mt-1">{formatDate(withdrawal.createdAt)}</p>
-                              {withdrawal.adminNote && (
-                                <p className={`text-xs mt-1 italic ${withdrawal.status === 'rejected' ? 'text-red-500' : 'text-blue-500'}`}>
-                                  Ghi chú: {withdrawal.adminNote}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge className={`${statusInfo.color} border-none px-3 py-1 rounded-full text-xs font-bold`}>{statusInfo.label}</Badge>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0 rounded-full hover:bg-orange-100 hover:text-orange-600"
-                                onClick={() => handleViewDetail(withdrawal._id)}
-                              >
-                                <Eye className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Withdrawal Pagination */}
-            {wdPagination && wdPagination.totalPages > 1 && (
-                <div className="flex justify-center items-center gap-4">
-                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={wdPage === 1} onClick={() => setWdPage(wdPage - 1)}>
-                        <ChevronLeft className="h-4 w-4 mr-1" /> Trước
-                    </Button>
-                    <span className="text-sm font-bold text-gray-500">Trang {wdPage} / {wdPagination.totalPages}</span>
-                    <Button variant="outline" size="sm" className="rounded-full h-9" disabled={wdPage === wdPagination.totalPages} onClick={() => setWdPage(wdPage + 1)}>
-                        Sau <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        </div>
 
         {/* Deposit Dialog */}
         <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
@@ -660,20 +458,20 @@ export default function WalletPage() {
                 <Label className="text-sm font-bold text-gray-700 ml-1">Số tiền nạp (VND)</Label>
                 <div className="relative">
                     <Input
-                    type="number"
-                    placeholder="Nhập số tiền (tối thiểu 10,000đ)"
-                    value={depositAmount}
-                    onChange={(e) => setDepositAmount(e.target.value)}
-                    min={10000}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Nhập số tiền (tối thiểu 10.000đ)"
+                    value={formatPriceInput(depositAmount)}
+                    onChange={(e) => setDepositAmount(parsePriceInput(e.target.value))}
                     className="h-14 rounded-2xl border-gray-200 focus:border-primary focus:ring-primary pl-4 text-lg font-bold"
                     />
                 </div>
                 {bonusPreview?.data && bonusPreview.data.bonusAmount > 0 && (
                   <div className="bg-amber-50 p-3 rounded-2xl border border-amber-100 animate-slide-up">
                     <p className="text-sm text-amber-700 font-bold flex items-center gap-2">
-                        <Sparkles className="h-4 w-4" /> Bạn sẽ nhận thêm: +{formatCurrency(bonusPreview.data.bonusAmount)}
+                        <Sparkles className="h-4 w-4" /> Bạn sẽ nhận thêm: +{formatPrice(bonusPreview.data.bonusAmount)}
                     </p>
-                    <p className="text-xs text-amber-600 mt-0.5">Tổng số dư sẽ nhận: {formatCurrency(bonusPreview.data.totalReceive)}</p>
+                    <p className="text-xs text-amber-600 mt-0.5">Tổng số dư sẽ nhận: {formatPrice(bonusPreview.data.totalReceive)}</p>
                   </div>
                 )}
               </div>
@@ -725,7 +523,7 @@ export default function WalletPage() {
          <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
           <DialogContent className="max-w-md rounded-[32px] border-none flex flex-col max-h-[90vh] overflow-hidden">
             <DialogHeader className="shrink-0 p-6 pb-2">
-              <DialogTitle className="text-2xl font-bold">Rút tiền về ngân hàng</DialogTitle>
+              <DialogTitle className="text-2xl font-bold">Hoàn tiền vào ví</DialogTitle>
               <DialogDescription>
                 Tiền sẽ được chuyển về tài khoản của bạn sau khi admin duyệt yêu cầu
               </DialogDescription>
@@ -733,40 +531,39 @@ export default function WalletPage() {
 
             <div className="space-y-5 px-6 py-4 overflow-y-auto flex-1">
               <div className="p-4 bg-amber-50 rounded-3xl border border-amber-100 border-dashed">
-                <p className="text-xs text-amber-700 font-bold uppercase tracking-wide mb-1">Số dư khả dụng</p>
+                <p className="text-xs text-amber-700 font-bold uppercase tracking-wide mb-1">Số dư ví</p>
                 <p className={`text-2xl font-bold ${(balance?.availableBalance ?? 0) < 0 ? 'text-red-600' : 'text-amber-900'}`}>
-                  {formatCurrency(balance?.availableBalance ?? 0)}
+                  {formatPrice(balance?.availableBalance ?? 0)}
                 </p>
                 <div className="mt-2 space-y-1">
                   <div className="flex justify-between text-[11px] text-amber-600">
-                    <span>Số dư chính</span>
-                    <span>{formatCurrency(balance?.walletBalance || 0)}</span>
+                    <span>Số dư ví</span>
+                    <span>{formatPrice(balance?.walletBalance || 0)}</span>
                   </div>
                   {(balance?.pendingPayments ?? 0) > 0 && (
                     <div className="flex justify-between text-[11px] text-red-500">
                       <span>− Đang chờ thanh toán đặt phòng</span>
-                      <span>{formatCurrency(balance?.pendingPayments ?? 0)}</span>
+                      <span>{formatPrice(balance?.pendingPayments ?? 0)}</span>
                     </div>
                   )}
                   {(balance?.pendingWithdrawalAmount ?? 0) > 0 && (
                     <div className="flex justify-between text-[11px] text-red-500">
-                      <span>− Đang chờ duyệt rút tiền</span>
-                      <span>{formatCurrency(balance?.pendingWithdrawalAmount ?? 0)}</span>
+                      <span>− Đang chờ duyệt hoàn tiền</span>
+                      <span>{formatPrice(balance?.pendingWithdrawalAmount ?? 0)}</span>
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] text-amber-600 mt-2 italic">* Chỉ có thể rút tiền từ số dư chính, không bao gồm tiền khuyến mãi và các khoản đang chờ.</p>
+                <p className="text-[10px] text-amber-600 mt-2 italic">* Chỉ có thể hoàn tiền từ số dư ví, không bao gồm tiền khuyến mãi và các khoản đang chờ.</p>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-bold text-gray-700 ml-1">Số tiền muốn rút</Label>
+                <Label className="text-sm font-bold text-gray-700 ml-1">Số tiền muốn hoàn</Label>
                 <Input
-                  type="number"
-                  placeholder="Nhập số tiền (tối thiểu 10,000đ)"
-                  value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
-                  min={10000}
-                  max={balance?.availableBalance || 0}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Nhập số tiền (tối thiểu 10.000đ)"
+                  value={formatPriceInput(withdrawAmount)}
+                  onChange={(e) => setWithdrawAmount(parsePriceInput(e.target.value))}
                   className="h-14 rounded-2xl border-gray-200 focus:border-primary focus:ring-primary pl-4 text-lg font-bold"
                 />
               </div>
@@ -818,7 +615,7 @@ export default function WalletPage() {
         <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
           <DialogContent className="max-w-md rounded-[24px]">
              <DialogHeader>
-                <DialogTitle>Chi tiết yêu cầu rút tiền</DialogTitle>
+                <DialogTitle>Chi tiết yêu cầu hoàn tiền</DialogTitle>
              </DialogHeader>
              {isLoadingDetail ? (
                 <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
@@ -833,7 +630,7 @@ export default function WalletPage() {
 
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase font-bold">Số tiền rút</Label>
-                    <p className="text-2xl font-bold text-red-600">{formatCurrency(withdrawalDetail.data.amount)}</p>
+                    <p className="text-2xl font-bold text-red-600">{formatPrice(withdrawalDetail.data.amount)}</p>
                   </div>
 
                   <div className="space-y-1">

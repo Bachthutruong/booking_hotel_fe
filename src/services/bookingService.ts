@@ -79,6 +79,14 @@ export const bookingService = {
     return data;
   },
 
+  /** Upload minh chứng bằng file — không cần đăng nhập (dùng cho trang thanh toán khách) */
+  async uploadProofFile(id: string, file: File): Promise<ApiResponse<Booking>> {
+    const formData = new FormData();
+    formData.append('image', file, file.name);
+    const { data } = await api.post<ApiResponse<Booking>>(`/bookings/${id}/upload-proof`, formData);
+    return data;
+  },
+
   async approveBooking(id: string, action: 'approve' | 'reject'): Promise<ApiResponse<Booking>> {
     const { data } = await api.put<ApiResponse<Booking>>(`/bookings/${id}/approve`, { action });
     return data;
@@ -115,6 +123,18 @@ export const bookingService = {
     return data;
   },
 
+  async markServiceDelivered(bookingId: string, serviceIndex: number): Promise<ApiResponse<Booking>> {
+    const { data } = await api.patch<ApiResponse<Booking>>(`/bookings/${bookingId}/services/deliver`, {
+      serviceIndex,
+    });
+    return data;
+  },
+
+  async markAllServicesDelivered(bookingId: string): Promise<ApiResponse<Booking>> {
+    const { data } = await api.patch<ApiResponse<Booking>>(`/bookings/${bookingId}/services/deliver-all`);
+    return data;
+  },
+
   async getBill(id: string): Promise<BookingBillResponse> {
     const { data } = await api.get<BookingBillResponse>(`/bookings/${id}/bill`);
     return data;
@@ -132,6 +152,11 @@ export const bookingService = {
     const { data } = await api.post<PayWalletResponse>(`/bookings/${id}/pay-wallet`, {
       paymentOption,
     });
+    return data;
+  },
+
+  async payDepositFromWallet(id: string): Promise<ApiResponse<Booking>> {
+    const { data } = await api.post<ApiResponse<Booking>>(`/bookings/${id}/pay-deposit-wallet`);
     return data;
   },
 

@@ -12,6 +12,28 @@ export function formatPrice(price: number): string {
   }).format(price);
 }
 
+/** Alias cho hiển thị tiền tệ (VND) - dùng chung với formatPrice */
+export const formatCurrency = formatPrice;
+
+/**
+ * Format số để hiển thị trong ô nhập tiền (VND): thêm dấu phân cách hàng nghìn.
+ * Chuỗi vào chỉ giữ lại chữ số, ví dụ "10000000" -> "10.000.000".
+ * Dùng cho value hiển thị; state nên lưu chuỗi chỉ-số và parse Number() khi gửi API.
+ */
+export function formatPriceInput(digitsOrFormatted: string): string {
+  const digits = digitsOrFormatted.replace(/\D/g, '');
+  if (digits === '') return '';
+  return Number(digits).toLocaleString('vi-VN');
+}
+
+/**
+ * Lấy chuỗi chỉ chữ số từ ô nhập (đã format hoặc chưa), dùng để set state.
+ * Ví dụ "10.000.000" hoặc "10000000" -> "10000000".
+ */
+export function parsePriceInput(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat('vi-VN', {
     day: '2-digit',
@@ -41,6 +63,8 @@ export function calculateNights(checkIn: string | Date, checkOut: string | Date)
 export function getStatusColor(status: string): string {
   const colors: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800',
+    pending_deposit: 'bg-amber-100 text-amber-800',
+    awaiting_approval: 'bg-orange-100 text-orange-800',
     confirmed: 'bg-blue-100 text-blue-800',
     completed: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
@@ -53,6 +77,8 @@ export function getStatusColor(status: string): string {
 export function getStatusText(status: string): string {
   const texts: Record<string, string> = {
     pending: 'Chờ xác nhận',
+    pending_deposit: 'Chờ đặt cọc',
+    awaiting_approval: 'Chờ duyệt',
     confirmed: 'Đã xác nhận',
     completed: 'Hoàn thành',
     cancelled: 'Đã hủy',

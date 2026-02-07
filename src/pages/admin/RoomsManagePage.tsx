@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Loader2, 
@@ -10,7 +10,7 @@ import {
   ChevronRight, 
   Image as ImageIcon,
   Search,
-  Filter
+  // Filter
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,7 @@ import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
 import { hotelService } from '@/services/hotelService';
 import { categoryService } from '@/services/categoryService';
 import { toast } from '@/hooks/use-toast';
+import { formatPrice } from '@/lib/utils';
 import type { Room, Hotel, RoomCategory } from '@/types';
 
 export default function RoomsManagePage() {
@@ -256,7 +257,7 @@ export default function RoomsManagePage() {
                       <TableCell className="capitalize">
                           {typeof room.category === 'object' && room.category?.name ? room.category.name : room.type}
                       </TableCell>
-                      <TableCell>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(room.price)}</TableCell>
+                      <TableCell>{formatPrice(room.price)}</TableCell>
                       <TableCell>{room.quantity}</TableCell>
                       <TableCell>
                           {room.capacity.adults} lớn, {room.capacity.children} trẻ
@@ -379,34 +380,49 @@ function RoomFormDialog({
     };
 
     const [formData, setFormData] = useState({
-        name: room?.name || '',
-        description: room?.description || '',
-        price: room?.price || 0,
-        category: getRoomCategoryId(room),
-        quantity: room?.quantity || 1,
-        adults: room?.capacity.adults || 2,
-        children: room?.capacity.children || 0,
-        amenities: room?.amenities?.join(', ') || ''
+        name: '',
+        description: '',
+        price: 0,
+        category: '',
+        quantity: 1,
+        adults: 2,
+        children: 0,
+        amenities: ''
     });
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Initialize when room changes
-    useState(() => {
-        if (room) {
-            setFormData({
-                name: room.name,
-                description: room.description,
-                price: room.price,
-                category: getRoomCategoryId(room),
-                quantity: room.quantity,
-                adults: room.capacity.adults,
-                children: room.capacity.children,
-                amenities: room.amenities.join(', ')
-            });
+    // Fill form when dialog opens (create vs edit)
+    useEffect(() => {
+        if (open) {
+            if (room) {
+                setFormData({
+                    name: room.name,
+                    description: room.description || '',
+                    price: room.price,
+                    category: getRoomCategoryId(room),
+                    quantity: room.quantity,
+                    adults: room.capacity?.adults ?? 2,
+                    children: room.capacity?.children ?? 0,
+                    amenities: Array.isArray(room.amenities) ? room.amenities.join(', ') : (room.amenities || '')
+                });
+            } else {
+                setFormData({
+                    name: '',
+                    description: '',
+                    price: 0,
+                    category: '',
+                    quantity: 1,
+                    adults: 2,
+                    children: 0,
+                    amenities: ''
+                });
+            }
+            setSelectedFiles([]);
+            setPreviewUrls([]);
         }
-    });
+    }, [open, room]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {

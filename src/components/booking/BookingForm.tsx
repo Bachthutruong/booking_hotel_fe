@@ -12,10 +12,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 
+import { Badge } from '@/components/ui/badge';
 import { bookingService } from '@/services/bookingService';
 import { serviceService } from '@/services/serviceService';
+import { serviceCategoryService } from '@/services/serviceCategoryService';
 import { useAuthStore } from '@/store/authStore';
-import type { Room, Service, BookingFormData } from '@/types';
+import { formatPrice } from '@/lib/utils';
+import type { Room, Service, ServiceCategory, BookingFormData } from '@/types';
 
 interface BookingFormProps {
   hotelId: string;
@@ -29,7 +32,10 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [services, setServices] = useState<Service[]>([]);
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedServices, setSelectedServices] = useState<{ [key: string]: number }>({});
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<BookingFormData>({
@@ -49,17 +55,19 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
   const checkOut = watch('checkOut');
 
   useEffect(() => {
-    const fetchServices = async () => {
+    const fetch = async () => {
       try {
-        const response = await serviceService.getServices();
-        if (response.success && response.data) {
-          setServices(response.data);
-        }
+        const [servicesRes, categoriesRes] = await Promise.all([
+          serviceService.getServices(),
+          serviceCategoryService.getServiceCategories(),
+        ]);
+        if (servicesRes.success && servicesRes.data) setServices(servicesRes.data);
+        if (categoriesRes.success && categoriesRes.data) setCategories(categoriesRes.data);
       } catch (error) {
-        console.error('Failed to fetch services');
+        console.error('Failed to fetch services/categories');
       }
     };
-    fetchServices();
+    fetch();
   }, []);
 
   const handleServiceToggle = (serviceId: string, checked: boolean) => {
@@ -104,32 +112,56 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
   const onSubmit = async (data: BookingFormData) => {
     try {
       setLoading(true);
-      
+      setSubmitError('');
+
       const formattedServices = Object.entries(selectedServices).map(([serviceId, quantity]) => ({
         serviceId,
         quantity
       }));
 
       const payload = {
-        ...data,
+        checkIn: data.checkIn,
+        checkOut: data.checkOut,
+        guests: data.guests ?? { adults: 1, children: 0 },
+        contactInfo: {
+          fullName: data.contactInfo?.fullName ?? '',
+          email: data.contactInfo?.email ?? '',
+          phone: data.contactInfo?.phone ?? '',
+        },
+        specialRequests: data.specialRequests ?? '',
         hotelId,
         roomId: room._id,
         services: formattedServices
       };
 
-      const response = await bookingService.createBooking(payload);
+      const response = await bookingService.createBooking(payload) as {
+        success: boolean;
+        data?: { _id: string };
+        token?: string;
+        user?: { _id: string; email: string; fullName: string; phone: string; avatar?: string; role: string };
+      };
 
       if (response.success && response.data) {
-        if (onSuccess) {
-            onSuccess(response.data._id);
-        } else {
-            // Default behavior: navigate to payment page
-             navigate(`/booking/${response.data._id}/payment`);
+        const { login: authLogin } = useAuthStore.getState();
+        if (response.token && response.user) {
+          authLogin(response.user as any, response.token);
+          // Đợi token ghi xong vào localStorage trước khi chuyển trang, tránh GET /bookings/:id gửi đi không kèm token → 401
+          await new Promise((r) => setTimeout(r, 100));
         }
+        if (onSuccess) {
+          onSuccess(response.data._id);
+        } else {
+          navigate(`/booking/${response.data._id}/payment`, {
+            state: { booking: response.data },
+          });
+        }
+      } else {
+        setSubmitError('Đặt phòng thất bại. Vui lòng thử lại.');
       }
     } catch (error: any) {
-      console.error(error);
-      // alert(error.response?.data?.message || 'Booking failed');
+      const message = error.response?.data?.message || error.message || 'Đặt phòng thất bại. Vui lòng thử lại.';
+      setSubmitError(message);
+      console.error('Booking error:', error.response?.data ?? error);
     } finally {
       setLoading(false);
     }
@@ -145,6 +177,12 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
       </CardHeader>
       <form onSubmit={handleSubmit(onSubmit)}>
         <CardContent className="space-y-6">
+          {submitError && (
+            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              {submitError}
+            </div>
+          )}
           {/* Dates */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -245,39 +283,75 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
           <div className="space-y-4">
             <h3 className="font-semibold">Dịch vụ đi kèm</h3>
             {services.length === 0 ? (
-                <p className="text-sm text-gray-500">Không có dịch vụ đi kèm nào.</p>
+              <p className="text-sm text-gray-500">Không có dịch vụ đi kèm nào.</p>
             ) : (
+              <>
+                {categories.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    <Badge
+                      variant={selectedCategoryId === null ? 'default' : 'outline'}
+                      className="cursor-pointer"
+                      onClick={() => setSelectedCategoryId(null)}
+                    >
+                      Tất cả
+                    </Badge>
+                    {categories.map((cat) => (
+                      <Badge
+                        key={cat._id}
+                        variant={selectedCategoryId === cat._id ? 'default' : 'outline'}
+                        className="cursor-pointer"
+                        onClick={() => setSelectedCategoryId(selectedCategoryId === cat._id ? null : cat._id)}
+                      >
+                        {cat.name}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
                 <div className="space-y-3">
-                    {services.map((service) => (
-                        <div key={service._id} className="flex items-center justify-between border p-3 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                                <Checkbox 
-                                    id={`service-${service._id}`} 
-                                    onCheckedChange={(checked: boolean | 'indeterminate') => handleServiceToggle(service._id, checked as boolean)}
-                                />
-                                <div className="space-y-0.5">
-                                    <Label htmlFor={`service-${service._id}`} className="text-base">{service.name}</Label>
-                                    <p className="text-xs text-muted-foreground">{service.description}</p>
-                                    <p className="text-sm font-medium text-primary">
-                                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(service.price)}
-                                    </p>
-                                </div>
+                  {services
+                    .filter((s) => {
+                      const catId = typeof s.category === 'string' ? s.category : (s.category as ServiceCategory)?._id;
+                      if (!selectedCategoryId) return true;
+                      return catId === selectedCategoryId;
+                    })
+                    .map((service) => (
+                      <div key={service._id} className="flex items-center justify-between border p-3 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          <Checkbox
+                            id={`service-${service._id}`}
+                            onCheckedChange={(checked: boolean | 'indeterminate') => handleServiceToggle(service._id, checked as boolean)}
+                          />
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Label htmlFor={`service-${service._id}`} className="text-base">{service.name}</Label>
+                              {typeof service.category === 'object' && service.category && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {(service.category as ServiceCategory).name}
+                                </Badge>
+                              )}
                             </div>
-                            {selectedServices[service._id] && (
-                                <div className="flex items-center gap-2">
-                                    <Label className="text-xs">SL:</Label>
-                                    <Input 
-                                        type="number" 
-                                        className="w-16 h-8" 
-                                        min={1} 
-                                        value={selectedServices[service._id]}
-                                        onChange={(e) => handleServiceQuantityChange(service._id, parseInt(e.target.value))}
-                                    />
-                                </div>
-                            )}
+                            <p className="text-xs text-muted-foreground">{service.description}</p>
+                            <p className="text-sm font-medium text-primary">
+                              {formatPrice(service.price)}
+                            </p>
+                          </div>
                         </div>
+                        {selectedServices[service._id] && (
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs">SL:</Label>
+                            <Input
+                              type="number"
+                              className="w-16 h-8"
+                              min={1}
+                              value={selectedServices[service._id]}
+                              onChange={(e) => handleServiceQuantityChange(service._id, parseInt(e.target.value))}
+                            />
+                          </div>
+                        )}
+                      </div>
                     ))}
                 </div>
+              </>
             )}
           </div>
           
@@ -290,7 +364,7 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
         <CardFooter className="flex-col gap-4">
             <div className="w-full flex justify-between items-center text-lg font-bold">
                 <span>Tổng cộng (tạm tính):</span>
-                <span>{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(total)}</span>
+                <span>{formatPrice(total)}</span>
             </div>
             <Button type="submit" className="w-full" disabled={loading || total === 0}>
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

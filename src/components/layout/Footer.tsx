@@ -15,7 +15,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-12">
           {/* Brand & Description */}
           <div className="space-y-6">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/hotels" className="flex items-center gap-2">
               <div className="bg-gradient-to-br from-primary/20 to-orange-200/30 p-2 rounded-xl">
                 <Building2 className="h-6 w-6 text-primary" />
               </div>

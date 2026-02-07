@@ -60,7 +60,13 @@ export function BookingsPage() {
   const { toast } = useToast();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [status, setStatus] = useState<string>('confirmed'); // Default to confirmed
+  // '' | 'waiting' (pending+pending_deposit+awaiting_approval) | 'confirmed' | 'completed' | 'cancelled'
+  const [statusFilter, setStatusFilter] = useState<string>('confirmed');
+  const getApiStatus = (filter: string): string | undefined => {
+    if (!filter) return undefined;
+    if (filter === 'waiting') return 'pending,pending_deposit,awaiting_approval';
+    return filter;
+  };
   const [cancelBooking, setCancelBooking] = useState<Booking | null>(null);
   const [reviewBooking, setReviewBooking] = useState<Booking | null>(null);
   const [reviewRating, setReviewRating] = useState(5);
@@ -71,8 +77,8 @@ export function BookingsPage() {
   const [serviceQuantity, setServiceQuantity] = useState(1);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['myBookings', { status, page, limit }],
-    queryFn: () => bookingService.getBookings({ status: status || undefined, page, limit }),
+    queryKey: ['myBookings', { statusFilter, page, limit }],
+    queryFn: () => bookingService.getBookings({ status: getApiStatus(statusFilter), page, limit }),
   });
 
   const { data: servicesData } = useQuery({
@@ -158,12 +164,12 @@ export function BookingsPage() {
       <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
       <h1 className="text-2xl font-bold mb-6">Đơn đặt phòng của tôi</h1>
 
-      <Tabs value={status} onValueChange={(v) => { setStatus(v); setPage(1); }}>
+      <Tabs value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
         {/* Desktop Layout */}
         <div className="hidden md:flex flex-wrap items-center justify-between gap-4 mb-6">
           <TabsList>
             <TabsTrigger value="">Tất cả</TabsTrigger>
-            <TabsTrigger value="pending">Chờ xác nhận</TabsTrigger>
+            <TabsTrigger value="waiting">Chờ xác nhận</TabsTrigger>
             <TabsTrigger value="confirmed">Đã xác nhận</TabsTrigger>
             <TabsTrigger value="completed">Hoàn thành</TabsTrigger>
             <TabsTrigger value="cancelled">Đã hủy</TabsTrigger>
@@ -207,9 +213,9 @@ export function BookingsPage() {
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-lg z-50">
           <div className="flex justify-around items-center py-2">
             <button
-              onClick={() => { setStatus(''); setPage(1); }}
+              onClick={() => { setStatusFilter(''); setPage(1); }}
               className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
-                status === '' ? 'text-primary' : 'text-muted-foreground'
+                statusFilter === '' ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -219,9 +225,9 @@ export function BookingsPage() {
             </button>
             
             <button
-              onClick={() => { setStatus('pending'); setPage(1); }}
+              onClick={() => { setStatusFilter('waiting'); setPage(1); }}
               className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
-                status === 'pending' ? 'text-primary' : 'text-muted-foreground'
+                statusFilter === 'waiting' ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -231,25 +237,25 @@ export function BookingsPage() {
             </button>
             
             <button
-              onClick={() => { setStatus('confirmed'); setPage(1); }}
+              onClick={() => { setStatusFilter('confirmed'); setPage(1); }}
               className={`flex flex-col items-center justify-center px-4 py-2 min-w-[70px] transition-colors relative ${
-                status === 'confirmed' ? 'text-white' : 'text-muted-foreground'
+                statusFilter === 'confirmed' ? 'text-white' : 'text-muted-foreground'
               }`}
             >
               <div className={`absolute -top-5 w-14 h-14 rounded-full flex items-center justify-center shadow-lg ${
-                status === 'confirmed' ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'
+                statusFilter === 'confirmed' ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'
               }`}>
-                <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${status === 'confirmed' ? 'text-white' : 'text-muted-foreground'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${statusFilter === 'confirmed' ? 'text-white' : 'text-muted-foreground'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <span className={`text-xs font-medium mt-6 ${status === 'confirmed' ? 'text-primary' : ''}`}>Xác nhận</span>
+              <span className={`text-xs font-medium mt-6 ${statusFilter === 'confirmed' ? 'text-primary' : ''}`}>Xác nhận</span>
             </button>
             
             <button
-              onClick={() => { setStatus('completed'); setPage(1); }}
+              onClick={() => { setStatusFilter('completed'); setPage(1); }}
               className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
-                status === 'completed' ? 'text-primary' : 'text-muted-foreground'
+                statusFilter === 'completed' ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -259,9 +265,9 @@ export function BookingsPage() {
             </button>
             
             <button
-              onClick={() => { setStatus('cancelled'); setPage(1); }}
+              onClick={() => { setStatusFilter('cancelled'); setPage(1); }}
               className={`flex flex-col items-center justify-center px-3 py-2 min-w-[60px] transition-colors ${
-                status === 'cancelled' ? 'text-primary' : 'text-muted-foreground'
+                statusFilter === 'cancelled' ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -272,7 +278,7 @@ export function BookingsPage() {
           </div>
         </div>
 
-        <TabsContent value={status} className="mt-0">
+        <TabsContent value={statusFilter} className="mt-0">
           {isLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (

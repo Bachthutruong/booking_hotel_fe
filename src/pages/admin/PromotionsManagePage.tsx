@@ -43,9 +43,8 @@ import { Switch } from '@/components/ui/switch';
 import { promotionService } from '@/services/promotionService';
 import { hotelService } from '@/services/hotelService';
 import { useToast } from '@/hooks/use-toast';
+import { formatPrice } from '@/lib/utils';
 import type { PromotionConfig, Hotel, Room } from '@/types';
-
-const formatCurrency = (amount: number) => amount.toLocaleString('vi-VN') + 'đ';
 
 const formatDate = (date?: string) => {
   if (!date) return '-';
@@ -234,7 +233,7 @@ export default function PromotionsManagePage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-semibold">{formatCurrency(promo.depositAmount)}</TableCell>
+                      <TableCell className="font-semibold">{formatPrice(promo.depositAmount)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           {promo.bonusPercent ? (
@@ -243,11 +242,11 @@ export default function PromotionsManagePage() {
                             </Badge>
                           ) : (
                             <Badge variant="secondary" className="bg-green-100 text-green-700">
-                              <Gift className="h-3 w-3 mr-1" /> +{formatCurrency(promo.bonusAmount)}
+                              <Gift className="h-3 w-3 mr-1" /> +{formatPrice(promo.bonusAmount)}
                             </Badge>
                           )}
                           {promo.maxBonus && (
-                            <span className="text-xs text-muted-foreground">(tối đa {formatCurrency(promo.maxBonus)})</span>
+                            <span className="text-xs text-muted-foreground">(tối đa {formatPrice(promo.maxBonus)})</span>
                           )}
                         </div>
                       </TableCell>

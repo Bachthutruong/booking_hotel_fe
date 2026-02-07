@@ -17,9 +17,8 @@ import { serviceService } from '@/services/serviceService';
 import { bookingService } from '@/services/bookingService';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/store/authStore';
+import { formatPrice } from '@/lib/utils';
 import type { Service, Booking } from '@/types';
-
-const formatCurrency = (amount: number) => amount.toLocaleString('vi-VN') + 'đ';
 
 export default function ScanServicePage() {
   const { serviceId } = useParams();
@@ -168,7 +167,7 @@ export default function ScanServicePage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Giá:</span>
-              <span className="font-bold text-lg text-primary">{formatCurrency(service.price)}</span>
+              <span className="font-bold text-lg text-primary">{formatPrice(service.price)}</span>
             </div>
           </div>
 
@@ -236,7 +235,7 @@ export default function ScanServicePage() {
             <div className="flex items-center justify-between">
               <span className="font-medium">Tổng cộng:</span>
               <span className="font-bold text-xl text-primary">
-                {formatCurrency(service.price * quantity)}
+                {formatPrice(service.price * quantity)}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">

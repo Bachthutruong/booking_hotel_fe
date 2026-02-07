@@ -9,6 +9,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { uploadService } from '@/services/uploadService';
 import { configService } from '@/services/configService';
 import { toast } from '@/hooks/use-toast';
+import { formatPrice } from '@/lib/utils';
 
 export default function PaymentConfigPage() {
   const [loading, setLoading] = useState(true);
@@ -229,7 +230,7 @@ export default function PaymentConfigPage() {
                 )}
                 {depositConfig.type === 'fixed' && (
                   <p className="text-sm text-muted-foreground">
-                    VD: Khách hàng cần chuyển {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(depositConfig.value)} cho mọi đơn hàng.
+                    VD: Khách hàng cần chuyển {formatPrice(depositConfig.value)} cho mọi đơn hàng.
                   </p>
                 )}
               </div>

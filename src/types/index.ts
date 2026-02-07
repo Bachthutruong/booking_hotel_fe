@@ -66,15 +66,44 @@ export interface Room {
   updatedAt: string;
 }
 
+// Service Category types
+export interface ServiceCategory {
+  _id: string;
+  name: string;
+  description: string;
+  icon?: string;
+  order: number;
+  isActive: boolean;
+  serviceCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Service types
 export interface Service {
   _id: string;
+  category?: string | ServiceCategory;
   name: string;
   description: string;
   price: number;
   icon?: string;
   qrCode?: string;
   isActive: boolean;
+  requiresConfirmation?: boolean; // Mặc định true: admin cần xác nhận đã bàn giao
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Notification types (admin)
+export interface Notification {
+  _id: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  recipientRole: string;
+  referenceType?: string;
+  referenceId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -111,6 +140,8 @@ export interface BookingServiceItem {
   service: string | Service;
   quantity: number;
   price: number;
+  addedAt?: string;    // Ngày giờ thêm dịch vụ
+  deliveredAt?: string; // Admin đã bàn giao (dịch vụ cần xác nhận)
 }
 
 export interface Booking {
@@ -180,19 +211,16 @@ export interface Pagination {
   totalPages: number;
 }
 
-// Auth types
+// Auth types - Đăng nhập: email + số điện thoại. Đăng ký: tên + email + số điện thoại.
 export interface LoginCredentials {
-  email?: string;
-  phone?: string;
-  identifier?: string;
-  password: string;
+  email: string;
+  phone: string;
 }
 
 export interface RegisterData {
-  email?: string;
-  password: string;
   fullName: string;
-  phone?: string;
+  email: string;
+  phone: string;
 }
 
 export interface AuthResponse {
@@ -235,7 +263,7 @@ export interface BookingFormData {
 }
 
 export interface AdminBookingFormData extends BookingFormData {
-  userId: string;
+  userId?: string; // Có khi chọn khách có sẵn; không gửi khi nhập thông tin khách mới
   status?: BookingStatus;
   paymentStatus?: PaymentStatus;
 }

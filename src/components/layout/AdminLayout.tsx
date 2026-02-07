@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   LayoutDashboard,
   Building2,
@@ -19,14 +20,24 @@ import {
   ArrowUpFromLine,
   Gift,
   Layers,
+  Bell,
+  CheckCheck,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { authService } from '@/services/authService';
+import { notificationService } from '@/services/notificationService';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import type { Notification } from '@/types';
 
 const sidebarItems = [
   {
@@ -70,7 +81,7 @@ const sidebarItems = [
     icon: ArrowDownToLine,
   },
   {
-    title: 'Rút tiền',
+    title: 'Hoàn tiền',
     href: '/admin/withdrawals',
     icon: ArrowUpFromLine,
   },
@@ -105,7 +116,25 @@ export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, logout } = useAuthStore();
+
+  const { data: notificationsData } = useQuery({
+    queryKey: ['adminNotifications'],
+    queryFn: () => notificationService.getNotifications({ limit: 30 }),
+    refetchInterval: 60000,
+  });
+  const notifications = (notificationsData?.data || []) as Notification[];
+  const unreadCount = (notificationsData as { unreadCount?: number })?.unreadCount ?? 0;
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => notificationService.markAsRead(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminNotifications'] }),
+  });
+  const markAllReadMutation = useMutation({
+    mutationFn: () => notificationService.markAllAsRead(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminNotifications'] }),
+  });
 
   const handleLogout = async () => {
     try {
@@ -209,9 +238,9 @@ export function AdminLayout() {
                 className="w-full justify-start rounded-full border-none shadow-none hover:bg-white"
                 asChild
               >
-                <Link to="/">
+                <Link to="/hotels">
                   <ChevronLeft className="mr-2 h-4 w-4" />
-                  Về trang chủ
+                  Về trang khách sạn
                 </Link>
               </Button>
               <Button
@@ -243,7 +272,65 @@ export function AdminLayout() {
             {sidebarItems.find((item) => item.href === location.pathname)?.title || 'Admin Dashboard'}
           </h1>
           <div className="ml-auto flex items-center gap-4">
-              {/* Add admin specific top bar items here if needed (notifications, search) */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative rounded-full">
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-[10px] font-medium text-white flex items-center justify-center">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 max-h-[70vh] overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between px-3 py-2 border-b">
+                    <span className="font-semibold text-sm">Thông báo</span>
+                    {unreadCount > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => markAllReadMutation.mutate()}
+                        disabled={markAllReadMutation.isPending}
+                      >
+                        {markAllReadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCheck className="h-3 w-3 mr-1" />}
+                        Đã đọc tất cả
+                      </Button>
+                    )}
+                  </div>
+                  <ScrollArea className="flex-1">
+                    {notifications.length === 0 ? (
+                      <p className="p-4 text-sm text-muted-foreground text-center">Chưa có thông báo</p>
+                    ) : (
+                      <div className="p-2">
+                        {notifications.map((n) => (
+                          <DropdownMenuItem
+                            key={n._id}
+                            className={cn(
+                              'flex flex-col items-start gap-0.5 p-3 cursor-pointer rounded-md',
+                              !n.read && 'bg-primary/5'
+                            )}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              if (!n.read) markReadMutation.mutate(n._id);
+                              if (n.referenceId && n.referenceType === 'Booking') {
+                                navigate(`/admin/bookings?open=${n.referenceId}`);
+                              }
+                            }}
+                          >
+                            <span className="font-medium text-sm">{n.title}</span>
+                            <span className="text-xs text-muted-foreground line-clamp-2">{n.message}</span>
+                            <span className="text-[10px] text-muted-foreground mt-0.5">
+                              {new Date(n.createdAt).toLocaleString('vi-VN')}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </DropdownMenuContent>
+              </DropdownMenu>
           </div>
         </header>
 

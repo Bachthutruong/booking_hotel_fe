@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Loader2, CheckCircle2, AlertCircle, ArrowLeft, PenTool } from 'lucide-react';
 import { walletService } from '@/services/walletService';
+import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/store/authStore';
 
@@ -40,7 +41,7 @@ export default function WithdrawalConfirmPage() {
       setConfirmed(true);
       toast({
         title: 'Xác nhận thành công',
-        description: 'Giao dịch rút tiền đã được thực hiện thành công.',
+        description: 'Giao dịch hoàn tiền đã được thực hiện thành công.',
       });
     },
     onError: (error: any) => {
@@ -107,7 +108,7 @@ export default function WithdrawalConfirmPage() {
             </div>
             <h2 className="text-2xl font-bold text-green-800">Giao dịch đã hoàn thành</h2>
             <p className="text-green-700">
-              Yêu cầu rút tiền {withdrawal.amount.toLocaleString()} VND đã được xác nhận thành công.
+              Yêu cầu hoàn tiền {formatPrice(withdrawal.amount)} đã được xác nhận thành công.
             </p>
             <div className="pt-4">
               <Button onClick={() => navigate('/wallet')}>Kiểm tra ví của tôi</Button>
@@ -122,7 +123,7 @@ export default function WithdrawalConfirmPage() {
     <div className="container max-w-lg mx-auto py-12 px-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl text-center">Xác nhận rút tiền</CardTitle>
+          <CardTitle className="text-2xl text-center">Xác nhận hoàn tiền</CardTitle>
           <CardDescription className="text-center">
              Vui lòng kiểm tra thông tin và ký xác nhận
           </CardDescription>
@@ -135,9 +136,9 @@ export default function WithdrawalConfirmPage() {
                <span className="font-medium">{user?.fullName}</span>
              </div>
              <div className="flex justify-between border-t border-dashed pt-2">
-               <span className="text-muted-foreground">Số tiền rút:</span>
+               <span className="text-muted-foreground">Số tiền hoàn:</span>
                <span className="text-xl font-bold text-red-600">
-                 {withdrawal.amount.toLocaleString()} VND
+                 {formatPrice(withdrawal.amount)}
                </span>
              </div>
           </div>
@@ -145,7 +146,7 @@ export default function WithdrawalConfirmPage() {
           <div className="space-y-2">
             <Label className="text-muted-foreground">Thông tin nhận tiền</Label>
             <div className="p-3 border rounded bg-white text-sm">
-               <p><span className="font-semibold">Ngân hàng:</span> {withdrawal.bankInfo.bankName}</p>
+               <p><span className="font-semibold">Tên ngân hàng:</span> {withdrawal.bankInfo.bankName}</p>
                <p><span className="font-semibold">STK:</span> {withdrawal.bankInfo.accountNumber}</p>
                <p><span className="font-semibold">Chủ TK:</span> {withdrawal.bankInfo.accountName}</p>
             </div>
@@ -201,7 +202,7 @@ export default function WithdrawalConfirmPage() {
                 Đang xử lý...
               </>
             ) : (
-              'Xác nhận rút tiền'
+              'Xác nhận hoàn tiền'
             )}
           </Button>
           <Button variant="outline" className="w-full" onClick={() => navigate(-1)}>
