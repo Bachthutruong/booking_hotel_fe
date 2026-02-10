@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { differenceInDays } from 'date-fns';
 import { Loader2, AlertCircle, Users } from 'lucide-react';
 
@@ -13,12 +14,15 @@ import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 
 import { Badge } from '@/components/ui/badge';
+import { RoomPriceBreakdown } from '@/components/booking/RoomPriceBreakdown';
 import { bookingService } from '@/services/bookingService';
 import { serviceService } from '@/services/serviceService';
 import { serviceCategoryService } from '@/services/serviceCategoryService';
+import { specialPriceService } from '@/services/specialPriceService';
 import { useAuthStore } from '@/store/authStore';
 import { formatPrice } from '@/lib/utils';
-import type { Room, Service, ServiceCategory, BookingFormData } from '@/types';
+import type { Room, Service, ServiceCategory, BookingFormData, RoomPriceBreakdownItem, ApiResponse } from '@/types';
+import type { PricePreviewResponse } from '@/services/specialPriceService';
 
 interface BookingFormProps {
   hotelId: string;
@@ -53,6 +57,19 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
 
   const checkIn = watch('checkIn');
   const checkOut = watch('checkOut');
+
+  const start = checkIn && checkOut ? new Date(checkIn) : null;
+  const end = checkIn && checkOut ? new Date(checkOut) : null;
+  const datesValid = start && end && start < end;
+
+  const { data: pricePreviewData, isLoading: loadingPricePreview } = useQuery<ApiResponse<PricePreviewResponse>>({
+    queryKey: ['roomPricePreview', room._id, checkIn, checkOut],
+    queryFn: () => specialPriceService.getPricePreview(room._id, checkIn!, checkOut!),
+    enabled: !!(room._id && checkIn && checkOut && datesValid),
+  });
+
+  const pricePreview = pricePreviewData?.data;
+  const hasBreakdown = pricePreview?.breakdown != null && pricePreview.breakdown.length > 0;
 
   useEffect(() => {
     const fetch = async () => {
@@ -92,12 +109,14 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
 
   const calculateTotal = () => {
     if (!checkIn || !checkOut) return 0;
-    const start = new Date(checkIn);
-    const end = new Date(checkOut);
-    if (start >= end) return 0;
-    
-    const nights = differenceInDays(end, start);
-    let total = room.price * nights;
+    const startDate = new Date(checkIn);
+    const endDate = new Date(checkOut);
+    if (startDate >= endDate) return 0;
+
+    const roomTotal = pricePreview?.totalRoomPrice != null
+      ? pricePreview.totalRoomPrice
+      : room.price * differenceInDays(endDate, startDate);
+    let total = roomTotal;
 
     Object.entries(selectedServices).forEach(([serviceId, quantity]) => {
       const service = services.find(s => s._id === serviceId);
@@ -204,6 +223,27 @@ export function BookingForm({ hotelId, room, initialCheckIn, initialCheckOut, on
               />
             </div>
           </div>
+
+          {/* Chi tiết giá từng ngày (khi đã chọn ngày) */}
+          {datesValid && (
+            <div className="space-y-2">
+              {loadingPricePreview ? (
+                <div className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Đang tải chi tiết giá...
+                </div>
+              ) : hasBreakdown ? (
+                <RoomPriceBreakdown
+                  breakdown={pricePreview!.breakdown.map((b: RoomPriceBreakdownItem) => ({
+                    ...b,
+                    date: typeof b.date === 'string' ? b.date : new Date(b.date).toISOString(),
+                  }))}
+                  roomName={room.name}
+                  compact={false}
+                />
+              ) : null}
+            </div>
+          )}
 
           {/* Guests */}
           <div className="space-y-3">

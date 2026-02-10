@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { bookingService } from '@/services/bookingService';
 import { formatPrice, getStatusText, getStatusColor, getRoomTypeText } from '@/lib/utils';
+import { RoomPriceBreakdown } from '@/components/booking/RoomPriceBreakdown';
 import type { Hotel, Room } from '@/types';
 
 export function BookingConfirmPage() {
@@ -124,6 +125,17 @@ export function BookingConfirmPage() {
 
               <Separator />
 
+              {booking.roomPriceBreakdown && booking.roomPriceBreakdown.length > 0 && (
+                <>
+                  <RoomPriceBreakdown
+                    breakdown={booking.roomPriceBreakdown}
+                    roomName={room?.name}
+                    compact
+                  />
+                  <Separator />
+                </>
+              )}
+
               <div className="flex justify-between font-semibold">
                 <span>Tổng thanh toán</span>
                 <span className="text-primary">{formatPrice(booking.totalPrice)}</span>
@@ -208,6 +220,17 @@ export function BookingConfirmPage() {
             </div>
 
             <Separator />
+
+            {booking.roomPriceBreakdown && booking.roomPriceBreakdown.length > 0 && (
+              <>
+                <RoomPriceBreakdown
+                  breakdown={booking.roomPriceBreakdown}
+                  roomName={room?.name}
+                  compact
+                />
+                <Separator />
+              </>
+            )}
 
             <div className="flex justify-between text-lg font-semibold">
               <span>Tổng thanh toán</span>

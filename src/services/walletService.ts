@@ -102,6 +102,11 @@ export const walletService = {
     return data;
   },
 
+  async getDepositDetail(id: string): Promise<ApiResponse<DepositRequest>> {
+    const { data } = await api.get<ApiResponse<DepositRequest>>(`/wallet/admin/deposits/${id}`);
+    return data;
+  },
+
   async processDeposit(id: string, action: 'approve' | 'reject', adminNote?: string): Promise<ApiResponse<DepositRequest>> {
     const { data } = await api.put<ApiResponse<DepositRequest>>(`/wallet/admin/deposits/${id}`, {
       action,

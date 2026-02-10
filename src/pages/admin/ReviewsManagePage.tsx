@@ -32,11 +32,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from '@/hooks/use-toast';
+import { useCanDelete } from '@/hooks/useCanDelete';
 import { reviewService } from '@/services/reviewService';
 import type { Review, User, Hotel } from '@/types';
 
 export default function ReviewsManagePage() {
   const queryClient = useQueryClient();
+  const canDelete = useCanDelete();
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -200,14 +202,16 @@ export default function ReviewsManagePage() {
                                       <X className="h-4 w-4" />
                                   </Button>
                               )}
-                              <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                className="h-8 w-8 text-red-600" 
-                                onClick={() => setDeleteReview(review)}
-                              >
-                                  <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {canDelete && (
+                                <Button 
+                                  size="icon" 
+                                  variant="ghost" 
+                                  className="h-8 w-8 text-red-600" 
+                                  onClick={() => setDeleteReview(review)}
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
                           </div>
                       </TableCell>
                       </TableRow>

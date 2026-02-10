@@ -43,6 +43,7 @@ import { Switch } from '@/components/ui/switch';
 import { promotionService } from '@/services/promotionService';
 import { hotelService } from '@/services/hotelService';
 import { useToast } from '@/hooks/use-toast';
+import { useCanDelete } from '@/hooks/useCanDelete';
 import { formatPrice } from '@/lib/utils';
 import type { PromotionConfig, Hotel, Room } from '@/types';
 
@@ -54,6 +55,7 @@ const formatDate = (date?: string) => {
 export default function PromotionsManagePage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const canDelete = useCanDelete();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState<PromotionConfig | null>(null);
   const [deletePromotion, setDeletePromotion] = useState<PromotionConfig | null>(null);
@@ -269,13 +271,15 @@ export default function PromotionsManagePage() {
                           <Button size="sm" variant="outline" onClick={() => openEditDialog(promo)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => setDeletePromotion(promo)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => setDeletePromotion(promo)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

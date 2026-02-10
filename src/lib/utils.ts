@@ -69,6 +69,7 @@ export function getStatusColor(status: string): string {
     completed: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
     paid: 'bg-green-100 text-green-800',
+    deposit_paid: 'bg-teal-100 text-teal-800',
     refunded: 'bg-gray-100 text-gray-800',
   };
   return colors[status] || 'bg-gray-100 text-gray-800';
@@ -82,7 +83,8 @@ export function getStatusText(status: string): string {
     confirmed: 'Đã xác nhận',
     completed: 'Hoàn thành',
     cancelled: 'Đã hủy',
-    paid: 'Đã thanh toán',
+    paid: 'Đã thanh toán toàn bộ',
+    deposit_paid: 'Đã thanh toán tiền cọc',
     refunded: 'Đã hoàn tiền',
   };
   return texts[status] || status;

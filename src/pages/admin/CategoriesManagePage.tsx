@@ -35,10 +35,12 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { categoryService } from '@/services/categoryService';
 import { toast } from '@/hooks/use-toast';
+import { useCanDelete } from '@/hooks/useCanDelete';
 import type { RoomCategory } from '@/types';
 
 export default function CategoriesManagePage() {
   const queryClient = useQueryClient();
+  const canDelete = useCanDelete();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<RoomCategory | null>(null);
   const [deleteCategory, setDeleteCategory] = useState<RoomCategory | null>(null);
@@ -234,14 +236,16 @@ export default function CategoriesManagePage() {
                             <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl hover:bg-white hover:shadow-md transition-all" onClick={() => openEditDialog(category)}>
                               <Edit className="h-4 w-4 text-gray-600" />
                             </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-9 w-9 rounded-xl hover:bg-red-50 hover:text-red-600 transition-all"
-                              onClick={() => setDeleteCategory(category)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canDelete && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-9 w-9 rounded-xl hover:bg-red-50 hover:text-red-600 transition-all"
+                                onClick={() => setDeleteCategory(category)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

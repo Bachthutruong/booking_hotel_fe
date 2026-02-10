@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
@@ -25,9 +25,10 @@ import {
   Users,
   FileText,
   QrCode,
+  Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -40,6 +41,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
@@ -55,6 +57,7 @@ import { bookingService } from '@/services/bookingService';
 import { serviceService } from '@/services/serviceService';
 import { hotelService } from '@/services/hotelService';
 import { formatPrice, getStatusText, getStatusColor, getRoomTypeText } from '@/lib/utils';
+import { RoomPriceBreakdown } from '@/components/booking/RoomPriceBreakdown';
 import type { Booking, Hotel, Room, Service } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
@@ -79,6 +82,22 @@ export default function BookingDetailPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [showQRDialog, setShowQRDialog] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+
+  // Preview ảnh minh chứng khi chọn file; cleanup khi đổi file hoặc unmount
+  useEffect(() => {
+    if (!proofFile) {
+      setProofPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(proofFile);
+    setProofPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [proofFile]);
 
   // Fetch booking detail
   const { data: bookingData, isLoading } = useQuery({
@@ -146,6 +165,26 @@ export default function BookingDetailPage() {
       toast({
         title: 'Đánh giá thành công',
         description: 'Cảm ơn bạn đã chia sẻ trải nghiệm',
+      });
+    },
+  });
+
+  // Upload / tải lại minh chứng đặt cọc
+  const uploadProofMutation = useMutation({
+    mutationFn: (file: File) => bookingService.uploadProofFile(id!, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booking', id] });
+      setProofFile(null);
+      toast({
+        title: 'Đã gửi minh chứng',
+        description: 'Ảnh minh chứng đặt cọc đã được cập nhật. Đơn đang chờ admin xác nhận.',
+      });
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast({
+        title: 'Lỗi',
+        description: error.response?.data?.message || 'Tải ảnh lên thất bại. Vui lòng thử lại.',
+        variant: 'destructive',
       });
     },
   });
@@ -347,16 +386,16 @@ export default function BookingDetailPage() {
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Người lớn</p>
-                    <p className="text-xl font-bold">{booking.guests.adults}</p>
+                    <p className="text-xl font-bold">{(Number(booking.guests?.adults) || 0)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Trẻ em</p>
-                    <p className="text-xl font-bold">{booking.guests.children}</p>
+                    <p className="text-xl font-bold">{(Number(booking.guests?.children) || 0)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Tổng khách</p>
                     <p className="text-xl font-bold">
-                      {booking.guests.adults + booking.guests.children}
+                      {(Number(booking.guests?.adults) || 0) + (Number(booking.guests?.children) || 0)}
                     </p>
                   </div>
                 </div>
@@ -511,6 +550,13 @@ export default function BookingDetailPage() {
                   <span className="text-muted-foreground">Tiền phòng</span>
                   <span>{formatPrice(booking.totalPrice - calculateServicesTotal())}</span>
                 </div>
+                {booking.roomPriceBreakdown && booking.roomPriceBreakdown.length > 0 && (
+                  <RoomPriceBreakdown
+                    breakdown={booking.roomPriceBreakdown}
+                    roomName={typeof booking.room === 'object' && booking.room ? booking.room.name : undefined}
+                    compact
+                  />
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Dịch vụ</span>
                   <span>{formatPrice(calculateServicesTotal())}</span>
@@ -520,6 +566,31 @@ export default function BookingDetailPage() {
                   <span>Tổng cộng</span>
                   <span className="text-primary">{formatPrice(booking.totalPrice)}</span>
                 </div>
+                {(() => {
+                  const depositRequired = booking.depositAmount ?? 0;
+                  const paidDeposit = booking.paidDepositAmount ?? booking.paidFromWallet ?? 0;
+                  const showDeposit = depositRequired > 0 || paidDeposit > 0 || ['pending_deposit', 'awaiting_approval', 'confirmed'].includes(booking.status);
+                  if (!showDeposit) return null;
+                  return (
+                    <>
+                      <Separator />
+                      {depositRequired > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Số tiền cọc (yêu cầu)</span>
+                          <span>{formatPrice(depositRequired)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-sm font-medium text-green-600">
+                        <span>Đã cọc</span>
+                        <span>{formatPrice(paidDeposit)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-medium text-orange-600">
+                        <span>Còn lại (thanh toán khi nhận phòng)</span>
+                        <span>{formatPrice(booking.totalPrice - paidDeposit)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
                 <div className="flex items-center justify-between pt-2">
                   <span className="text-muted-foreground">Trạng thái thanh toán</span>
                   <Badge className={getStatusColor(booking.paymentStatus)}>
@@ -528,6 +599,63 @@ export default function BookingDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Minh chứng đặt cọc: xem / tải lại khi đơn chờ cọc hoặc chờ duyệt */}
+            {(booking.status === 'pending_deposit' || booking.status === 'awaiting_approval') && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="h-5 w-5" />
+                    Minh chứng đặt cọc
+                  </CardTitle>
+                  <CardDescription>
+                    {booking.proofImage
+                      ? 'Bạn có thể tải ảnh mới để thay thế minh chứng đã gửi.'
+                      : 'Tải ảnh chụp màn hình giao dịch chuyển khoản đặt cọc (hoặc đến trang thanh toán để xem thông tin chuyển khoản).'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {booking.proofImage && !proofFile && (
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Minh chứng hiện tại</Label>
+                      <img
+                        src={booking.proofImage}
+                        alt="Minh chứng đặt cọc"
+                        className="w-full max-h-56 object-contain rounded-lg border bg-muted/30"
+                      />
+                    </div>
+                  )}
+                  {proofPreviewUrl && (
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Ảnh mới (xem trước)</Label>
+                      <img
+                        src={proofPreviewUrl}
+                        alt="Preview"
+                        className="w-full max-h-56 object-contain rounded-lg border bg-muted/30"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>{booking.proofImage ? 'Chọn ảnh mới để thay thế' : 'Chọn ảnh minh chứng'}</Label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="cursor-pointer"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProofFile(e.target.files?.[0] ?? null)}
+                    />
+                    <Button
+                      className="w-full"
+                      variant={booking.proofImage ? 'outline' : 'default'}
+                      disabled={!proofFile || uploadProofMutation.isPending}
+                      onClick={() => proofFile && uploadProofMutation.mutate(proofFile)}
+                    >
+                      {uploadProofMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      {booking.proofImage ? 'Tải lại minh chứng (gửi ảnh mới)' : 'Gửi minh chứng đặt cọc'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Status Timeline */}
             <Card>

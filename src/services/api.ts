@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { useAuthStore } from '@/store/authStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -10,10 +11,25 @@ const api = axios.create({
   },
 });
 
-// Request interceptor: add auth token; với FormData thì bỏ Content-Type để axios tự set multipart/form-data + boundary
+function getStoredToken(): string | null {
+  const fromStore = useAuthStore.getState().token;
+  if (fromStore) return fromStore;
+  const fromKey = localStorage.getItem('token');
+  if (fromKey) return fromKey;
+  try {
+    const raw = localStorage.getItem('auth-storage');
+    if (raw) {
+      const parsed = JSON.parse(raw) as { state?: { token?: string } };
+      if (parsed?.state?.token) return parsed.state.token;
+    }
+  } catch (_) {}
+  return null;
+}
+
+// Request interceptor: add auth token; đọc store -> localStorage 'token' -> raw 'auth-storage'
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = getStoredToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -44,7 +60,9 @@ api.interceptors.response.use(
       const isUploadProof = method === 'post' && /^\/bookings\/[^/]+\/upload-proof$/.test(url);
       const skipRedirect = isGuestBooking || isGetBooking || isPutProof || isPayWallet || isPayDepositWallet || isUpload || isUploadProof;
       if (!skipRedirect) {
-        localStorage.removeItem('token');
+        // Clear both localStorage token AND zustand persisted state (auth-storage)
+        // so that after redirect+reload the app doesn't rehydrate with stale token and loop.
+        useAuthStore.getState().logout();
         window.location.href = '/auth/login';
       }
     }

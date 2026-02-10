@@ -14,6 +14,20 @@ interface AuthState {
   logout: () => void;
 }
 
+let resolveRehydrated: () => void;
+let rehydratedDone = false;
+const markRehydrated = () => {
+  if (!rehydratedDone) {
+    rehydratedDone = true;
+    resolveRehydrated();
+  }
+};
+/** Promise resolve khi persist đã rehydrate xong (tránh đọc token = null lúc mới load/ẩn danh) */
+export const rehydratedPromise = new Promise<void>((r) => {
+  resolveRehydrated = r;
+  setTimeout(markRehydrated, 150);
+});
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -49,6 +63,14 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       partialize: (state) => ({ token: state.token }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.token) {
+          try {
+            localStorage.setItem('token', state.token);
+          } catch (_) {}
+        }
+        markRehydrated();
+      },
     }
   )
 );

@@ -54,11 +54,13 @@ import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
 import { hotelService } from '@/services/hotelService';
 import { categoryService } from '@/services/categoryService';
 import { toast } from '@/hooks/use-toast';
+import { useCanDelete } from '@/hooks/useCanDelete';
 import { formatPrice } from '@/lib/utils';
 import type { Room, Hotel, RoomCategory } from '@/types';
 
 export default function RoomsManagePage() {
   const queryClient = useQueryClient();
+  const canDelete = useCanDelete();
   const [selectedHotel, setSelectedHotel] = useState<string>('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -272,9 +274,11 @@ export default function RoomsManagePage() {
                              <Button variant="ghost" size="icon" onClick={() => setEditRoom(room)}>
                                 <Pencil className="h-4 w-4" />
                              </Button>
-                             <Button variant="ghost" size="icon" className="text-red-500" onClick={() => setDeleteRoom(room)}>
-                                <Trash2 className="h-4 w-4" />
-                             </Button>
+                             {canDelete && (
+                               <Button variant="ghost" size="icon" className="text-red-500" onClick={() => setDeleteRoom(room)}>
+                                  <Trash2 className="h-4 w-4" />
+                               </Button>
+                             )}
                           </div>
                       </TableCell>
                       </TableRow>

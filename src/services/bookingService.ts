@@ -14,6 +14,11 @@ interface BookingBillResponse extends ApiResponse<{
     nights: number;
     userWalletBalance: number;
     userBonusBalance: number;
+    paidFromWallet?: number;
+    paidFromBonus?: number;
+    paidDepositAmount?: number;
+    totalPaid?: number;
+    amountDue?: number;
   };
 }> {}
 

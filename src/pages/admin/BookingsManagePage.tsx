@@ -23,7 +23,6 @@ import { useReactToPrint } from 'react-to-print';
 import {
   Search,
   Eye,
-  MoreHorizontal,
   ChevronLeft,
   ChevronRight,
   Calendar,
@@ -60,11 +59,15 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
@@ -85,6 +88,7 @@ import { hotelService } from '@/services/hotelService';
 import { toast } from '@/hooks/use-toast';
 import { formatPrice, getStatusText, getStatusColor } from '@/lib/utils';
 import { InvoicePrint } from '@/components/InvoicePrint';
+import { RoomPriceBreakdown } from '@/components/booking/RoomPriceBreakdown';
 import type { ApiResponse, Booking, Hotel, Room, User, Invoice, PaymentOption, Service } from '@/types';
 
 // Status colors for calendar
@@ -133,6 +137,9 @@ export function BookingsManagePage() {
     }, 500);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // Check-in confirmation
+  const [checkInConfirmBooking, setCheckInConfirmBooking] = useState<Booking | null>(null);
 
   // Checkout dialog state
   const [checkoutDialog, setCheckoutDialog] = useState<Booking | null>(null);
@@ -344,7 +351,14 @@ export function BookingsManagePage() {
   };
 
   const handleCheckIn = (booking: Booking) => {
-    checkInMutation.mutate(booking._id);
+    setCheckInConfirmBooking(booking);
+  };
+
+  const confirmCheckIn = () => {
+    if (!checkInConfirmBooking) return;
+    checkInMutation.mutate(checkInConfirmBooking._id, {
+      onSettled: () => setCheckInConfirmBooking(null),
+    });
   };
 
   const handleCheckout = () => {
@@ -739,8 +753,16 @@ export function BookingsManagePage() {
                     {bookings.map((booking: Booking) => {
                       const user = booking.user as User;
                       const hotel = booking.hotel as Hotel;
-                      const paidAmount = (booking.paidFromWallet || 0) + (booking.paidFromBonus || 0);
-                      const remainingAmount = booking.totalPrice - paidAmount;
+                      const totalPrice = booking.finalPrice ?? booking.totalPrice ?? 0;
+                      const isFullyPaid = booking.status === 'completed' && booking.paymentStatus === 'paid';
+                      const paidAmount = isFullyPaid
+                        ? totalPrice
+                        : (() => {
+                            const walletBonus = (booking.paidFromWallet ?? 0) + (booking.paidFromBonus ?? 0);
+                            const depositByBank = (booking.paidDepositAmount ?? 0) > 0 && (booking.paidFromWallet ?? 0) < (booking.paidDepositAmount ?? 0);
+                            return walletBonus + (depositByBank ? (booking.paidDepositAmount ?? 0) : 0);
+                          })();
+                      const remainingAmount = isFullyPaid ? 0 : Math.max(0, totalPrice - paidAmount);
 
                       return (
                         <TableRow key={booking._id}>
@@ -763,13 +785,13 @@ export function BookingsManagePage() {
                             </div>
                           </TableCell>
                           <TableCell className="font-medium">
-                            {formatPrice(booking.totalPrice)}
+                            {formatPrice(totalPrice)}
                           </TableCell>
                           <TableCell className="text-green-600 font-medium">
                             {formatPrice(paidAmount)}
                           </TableCell>
                           <TableCell className="text-orange-600 font-medium">
-                            {formatPrice(Math.max(0, remainingAmount))}
+                            {formatPrice(remainingAmount)}
                           </TableCell>
                           <TableCell>
                             <Badge className={getStatusColor(booking.status)}>
@@ -782,50 +804,64 @@ export function BookingsManagePage() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setSelectedBooking(booking)}>
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  Xem chi tiết
-                                </DropdownMenuItem>
-                                {/* Check-in button - only for confirmed bookings without actual check-in */}
+                            <div className="flex items-center gap-1">
+                              <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" onClick={() => setSelectedBooking(booking)}>
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Xem chi tiết</TooltipContent>
+                                </Tooltip>
                                 {booking.status === 'confirmed' && !booking.actualCheckIn && (
-                                  <DropdownMenuItem onClick={() => handleCheckIn(booking)}>
-                                    <LogIn className="mr-2 h-4 w-4" />
-                                    Check-in
-                                  </DropdownMenuItem>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" onClick={() => handleCheckIn(booking)}>
+                                        <LogIn className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Check-in</TooltipContent>
+                                  </Tooltip>
                                 )}
-                                {/* Checkout button - only for confirmed bookings with actual check-in */}
                                 {booking.status === 'confirmed' && booking.actualCheckIn && (
-                                  <DropdownMenuItem onClick={() => fetchBill(booking)}>
-                                    <LogOut className="mr-2 h-4 w-4" />
-                                    Checkout & Thanh toán
-                                  </DropdownMenuItem>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" onClick={() => fetchBill(booking)}>
+                                        <LogOut className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Checkout & Thanh toán</TooltipContent>
+                                  </Tooltip>
                                 )}
-                                {/* Invoice button - for completed bookings */}
                                 {booking.status === 'completed' && (
-                                  <DropdownMenuItem onClick={() => fetchInvoice(booking._id)}>
-                                    <Receipt className="mr-2 h-4 w-4" />
-                                    Xem hóa đơn
-                                  </DropdownMenuItem>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button variant="ghost" size="icon" onClick={() => fetchInvoice(booking._id)}>
+                                        <Receipt className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Xem hóa đơn</TooltipContent>
+                                  </Tooltip>
                                 )}
-                                <DropdownMenuItem
-                                  onClick={() => {
-                                    setUpdateDialog(booking);
-                                    setNewStatus(booking.status);
-                                    setNewPaymentStatus(booking.paymentStatus);
-                                  }}
-                                >
-                                  <Calendar className="mr-2 h-4 w-4" />
-                                  Cập nhật trạng thái
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        setUpdateDialog(booking);
+                                        setNewStatus(booking.status);
+                                        setNewPaymentStatus(booking.paymentStatus);
+                                      }}
+                                    >
+                                      <Calendar className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Cập nhật trạng thái</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -867,9 +903,45 @@ export function BookingsManagePage() {
         </>
       )}
 
+      {/* Check-in confirmation dialog */}
+      <AlertDialog open={!!checkInConfirmBooking} onOpenChange={(open) => !open && setCheckInConfirmBooking(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận check-in?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {checkInConfirmBooking && (
+                <>
+                  Xác nhận khách đã nhận phòng cho đơn{' '}
+                  <span className="font-medium">
+                    {(checkInConfirmBooking.room as Room)?.name}
+                  </span>
+                  {' '}({checkInConfirmBooking.checkIn && format(new Date(checkInConfirmBooking.checkIn), 'dd/MM/yyyy')} - {checkInConfirmBooking.checkOut && format(new Date(checkInConfirmBooking.checkOut), 'dd/MM/yyyy')})?
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCheckIn}
+              disabled={checkInMutation.isPending}
+            >
+              {checkInMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Đang xử lý...
+                </>
+              ) : (
+                'Xác nhận check-in'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Date Detail Dialog (for calendar) */}
       <Dialog open={!!selectedDateDialog} onOpenChange={() => setSelectedDateDialog(null)}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-[50vw] w-[50vw] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CalendarDays className="h-5 w-5 text-primary" />
@@ -884,8 +956,14 @@ export function BookingsManagePage() {
                 const room = booking.room as Room;
                 const user = booking.user as User;
                 const colors = statusCalendarColors[booking.status] || statusCalendarColors.pending;
-                const paidAmount = (booking.paidFromWallet || 0) + (booking.paidFromBonus || 0);
-                const remainingAmount = booking.totalPrice - paidAmount;
+                const totalPrice = booking.finalPrice ?? booking.totalPrice ?? 0;
+                const isFullyPaid = booking.status === 'completed' && booking.paymentStatus === 'paid';
+                const paidAmount = isFullyPaid ? totalPrice : (() => {
+                  const walletBonus = (booking.paidFromWallet ?? 0) + (booking.paidFromBonus ?? 0);
+                  const depositByBank = (booking.paidDepositAmount ?? 0) > 0 && (booking.paidFromWallet ?? 0) < (booking.paidDepositAmount ?? 0);
+                  return walletBonus + (depositByBank ? (booking.paidDepositAmount ?? 0) : 0);
+                })();
+                const remainingAmount = isFullyPaid ? 0 : Math.max(0, totalPrice - paidAmount);
 
                 return (
                   <div
@@ -946,7 +1024,7 @@ export function BookingsManagePage() {
           }
         }}
       >
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[50vw] w-[50vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Chi tiết đặt phòng</DialogTitle>
           </DialogHeader>
@@ -1071,19 +1149,48 @@ export function BookingsManagePage() {
                 )}
               </div>
 
+              {selectedBooking.roomPriceBreakdown && selectedBooking.roomPriceBreakdown.length > 0 && (
+                <div className="border-t pt-2">
+                  <RoomPriceBreakdown
+                    breakdown={selectedBooking.roomPriceBreakdown}
+                    roomName={typeof selectedBooking.room === 'object' && selectedBooking.room ? (selectedBooking.room as Room).name : undefined}
+                    compact
+                  />
+                </div>
+              )}
               <div className="border-t pt-2 space-y-1">
                   <div className="flex justify-between items-center font-bold text-lg">
                     <span>Tổng tiền</span>
-                    <span className="text-primary">{formatPrice(selectedBooking.totalPrice)}</span>
+                    <span className="text-primary">{formatPrice(selectedBooking.finalPrice ?? selectedBooking.totalPrice ?? 0)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-sm text-green-600">
-                    <span>Đã thanh toán (Ví + KM)</span>
-                    <span>{formatPrice((selectedBooking.paidFromWallet || 0) + (selectedBooking.paidFromBonus || 0))}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm text-orange-600 font-bold">
-                    <span>Cần thanh toán</span>
-                    <span>{formatPrice(selectedBooking.totalPrice - ((selectedBooking.paidFromWallet || 0) + (selectedBooking.paidFromBonus || 0)))}</span>
-                  </div>
+                  {(selectedBooking.depositAmount != null && selectedBooking.depositAmount > 0) && (
+                    <div className="flex justify-between items-center text-sm text-muted-foreground">
+                      <span>Số tiền cọc (yêu cầu)</span>
+                      <span>{formatPrice(selectedBooking.depositAmount)}</span>
+                    </div>
+                  )}
+                  {(() => {
+                    const totalPrice = selectedBooking.finalPrice ?? selectedBooking.totalPrice ?? 0;
+                    const isFullyPaid = selectedBooking.status === 'completed' && selectedBooking.paymentStatus === 'paid';
+                    const paid = isFullyPaid ? totalPrice : (() => {
+                      const wb = (selectedBooking.paidFromWallet ?? 0) + (selectedBooking.paidFromBonus ?? 0);
+                      const depBank = (selectedBooking.paidDepositAmount ?? 0) > 0 && (selectedBooking.paidFromWallet ?? 0) < (selectedBooking.paidDepositAmount ?? 0);
+                      return wb + (depBank ? (selectedBooking.paidDepositAmount ?? 0) : 0);
+                    })();
+                    const remaining = isFullyPaid ? 0 : Math.max(0, totalPrice - paid);
+                    return (
+                      <>
+                        <div className="flex justify-between items-center text-sm text-green-600">
+                          <span>Đã cọc / Đã thanh toán</span>
+                          <span>{formatPrice(paid)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm text-orange-600 font-bold">
+                          <span>Còn lại (cần thanh toán)</span>
+                          <span>{formatPrice(remaining)}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
               </div>
 
               <div className="border-t pt-2">
@@ -1120,7 +1227,7 @@ export function BookingsManagePage() {
 
       {/* Update Status Dialog */}
       <Dialog open={!!updateDialog} onOpenChange={() => setUpdateDialog(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-[50vw] w-[50vw]">
           <DialogHeader>
             <DialogTitle>Cập nhật trạng thái</DialogTitle>
           </DialogHeader>
@@ -1149,7 +1256,8 @@ export function BookingsManagePage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pending">Chờ thanh toán</SelectItem>
-                  <SelectItem value="paid">Đã thanh toán</SelectItem>
+                  <SelectItem value="deposit_paid">Đã thanh toán tiền cọc</SelectItem>
+                  <SelectItem value="paid">Đã thanh toán toàn bộ</SelectItem>
                   <SelectItem value="refunded">Đã hoàn tiền</SelectItem>
                 </SelectContent>
               </Select>
@@ -1171,7 +1279,7 @@ export function BookingsManagePage() {
 
       {/* Checkout Dialog */}
       <Dialog open={!!checkoutDialog} onOpenChange={() => { setCheckoutDialog(null); setBillData(null); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[50vw] w-[50vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5" /> Checkout & Thanh toán
@@ -1188,11 +1296,19 @@ export function BookingsManagePage() {
               userBonusBalance: number;
               paidFromWallet?: number;
               paidFromBonus?: number;
+              paidDepositAmount?: number;
               totalPaid?: number;
               amountDue?: number;
             };
-            const totalPaid = summary.totalPaid ?? (summary.paidFromWallet ?? 0) + (summary.paidFromBonus ?? 0);
-            const amountDue = summary.amountDue ?? Math.max(0, summary.estimatedTotal - totalPaid);
+            // Tránh cộng cọc 2 lần: cọc từ ví đã nằm trong paidFromWallet — công thức giống backend
+            const walletBonus = (summary.paidFromWallet ?? 0) + (summary.paidFromBonus ?? 0);
+            const est = summary.estimatedTotal ?? 0;
+            const totalPaid = summary.totalPaid ?? Math.min(
+              walletBonus + Math.max(0, (summary.paidDepositAmount ?? 0) - (summary.paidFromWallet ?? 0)),
+              est
+            );
+            // Số tiền cần thanh toán = Tổng cộng − Đã thanh toán
+            const amountDue = Math.max(0, (summary.estimatedTotal ?? 0) - totalPaid);
             const hotel = booking.hotel as Hotel;
             const room = booking.room as Room;
             return (
@@ -1237,6 +1353,11 @@ export function BookingsManagePage() {
                   <span className="text-muted-foreground">Tiền phòng ({billData.summary.nights} đêm):</span>
                   <span className="font-medium">{formatPrice(billData.summary.roomPrice)}</span>
                 </div>
+                {booking.roomPriceBreakdown && booking.roomPriceBreakdown.length > 0 && (
+                  <div className="pl-2 mt-1">
+                    <RoomPriceBreakdown breakdown={booking.roomPriceBreakdown} roomName={room?.name} compact />
+                  </div>
+                )}
                 {booking.services && booking.services.length > 0 && (
                   <>
                     <p className="text-muted-foreground text-sm mt-2">Dịch vụ:</p>
@@ -1260,8 +1381,21 @@ export function BookingsManagePage() {
                   <span>Tổng cộng:</span>
                   <span className="text-primary">{formatPrice(summary.estimatedTotal)}</span>
                 </div>
+                {/* Luôn hiển thị cọc: yêu cầu và đã nộp (từ booking/summary trong bill) */}
+                {(Number(booking.depositAmount) || 0) > 0 && (
+                  <div className="pl-2 text-xs space-y-0.5">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Số tiền cọc (yêu cầu):</span>
+                      <span>{formatPrice(booking.depositAmount ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between font-medium text-green-600">
+                      <span>Đã nộp cọc:</span>
+                      <span>{formatPrice(summary.paidDepositAmount ?? booking.paidDepositAmount ?? 0)}</span>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm text-green-600 border-t pt-2 mt-1">
-                  <span>Tiền đã cọc / đã thanh toán:</span>
+                  <span>Tiền đã thanh toán (tổng):</span>
                   <span className="font-medium">{formatPrice(totalPaid)}</span>
                 </div>
                 {totalPaid > 0 && (
@@ -1281,9 +1415,12 @@ export function BookingsManagePage() {
                   </div>
                 )}
                 <div className="flex justify-between text-base font-bold text-primary border-t pt-2 mt-1">
-                  <span>Số tiền cần thanh toán:</span>
+                  <span>Số tiền cần thanh toán (Tổng − Đã thanh toán):</span>
                   <span>{formatPrice(amountDue)}</span>
                 </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {formatPrice(summary.estimatedTotal ?? 0)} − {formatPrice(totalPaid)} = {formatPrice(amountDue)}
+                </p>
               </div>
 
               {/* Số dư ví khách hàng */}
@@ -1309,6 +1446,7 @@ export function BookingsManagePage() {
                   <SelectContent>
                     <SelectItem value="use_bonus">Dùng tiền khuyến mãi trước</SelectItem>
                     <SelectItem value="use_main_only">Chỉ dùng số dư chính</SelectItem>
+                    <SelectItem value="use_cash">Thanh toán tiền mặt</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1323,10 +1461,10 @@ export function BookingsManagePage() {
                 />
               </div>
 
-              {/* Warning if insufficient balance */}
-              {amountDue > 0 && amountDue > billData.summary.userWalletBalance + billData.summary.userBonusBalance && (
+              {/* Warning if insufficient balance (chỉ khi chọn thanh toán bằng ví) */}
+              {amountDue > 0 && paymentOption !== 'use_cash' && amountDue > billData.summary.userWalletBalance + billData.summary.userBonusBalance && (
                 <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-amber-700 text-sm">
-                  ⚠️ Số dư ví không đủ để thanh toán. Khách sẽ cần thanh toán thêm bằng tiền mặt hoặc hình thức khác.
+                  ⚠️ Số dư ví không đủ. Không thể thanh toán bằng ví. Vui lòng chọn &quot;Thanh toán tiền mặt&quot; hoặc yêu cầu khách nạp thêm.
                 </div>
               )}
             </div>
@@ -1338,7 +1476,14 @@ export function BookingsManagePage() {
             </Button>
             <Button
               onClick={handleCheckout}
-              disabled={checkoutMutation.isPending}
+              disabled={
+                checkoutMutation.isPending ||
+                (billData &&
+                  (billData.summary?.amountDue ?? 0) > 0 &&
+                  paymentOption !== 'use_cash' &&
+                  (billData.summary?.amountDue ?? 0) >
+                    (billData.summary?.userWalletBalance ?? 0) + (billData.summary?.userBonusBalance ?? 0))
+              }
               className="bg-green-600 hover:bg-green-700"
             >
               {checkoutMutation.isPending ? (
@@ -1354,7 +1499,7 @@ export function BookingsManagePage() {
 
       {/* Invoice Dialog */}
       <Dialog open={!!invoiceData} onOpenChange={() => setInvoiceData(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[50vw] w-[50vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="h-5 w-5" /> Hóa đơn

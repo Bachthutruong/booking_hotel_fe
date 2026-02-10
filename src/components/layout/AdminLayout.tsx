@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   LayoutDashboard,
@@ -16,13 +16,12 @@ import {
   Settings,
   PlusCircle,
   Wallet,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   Gift,
   Layers,
   Bell,
   CheckCheck,
   Loader2,
+  Percent,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -39,77 +38,20 @@ import { notificationService } from '@/services/notificationService';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { Notification } from '@/types';
 
-const sidebarItems = [
-  {
-    title: 'Dashboard',
-    href: '/admin',
-    icon: LayoutDashboard,
-  },
-  {
-    title: 'Khách sạn',
-    href: '/admin/hotels',
-    icon: Building2,
-  },
-  {
-    title: 'Danh mục phòng',
-    href: '/admin/categories',
-    icon: Layers,
-  },
-  {
-    title: 'Phòng',
-    href: '/admin/rooms',
-    icon: BedDouble,
-  },
-  {
-    title: 'Đặt phòng',
-    href: '/admin/bookings',
-    icon: CalendarDays,
-  },
-  {
-    title: 'Tạo đặt phòng',
-    href: '/admin/bookings/create',
-    icon: PlusCircle,
-  },
-  {
-    title: 'Dịch vụ',
-    href: '/admin/services',
-    icon: ConciergeBell,
-  },
-  {
-    title: 'Nạp tiền',
-    href: '/admin/deposits',
-    icon: ArrowDownToLine,
-  },
-  {
-    title: 'Hoàn tiền',
-    href: '/admin/withdrawals',
-    icon: ArrowUpFromLine,
-  },
-  {
-    title: 'Quản lý ví',
-    href: '/admin/wallets',
-    icon: Wallet,
-  },
-  {
-    title: 'Khuyến mãi',
-    href: '/admin/promotions',
-    icon: Gift,
-  },
-  {
-    title: 'Cấu hình',
-    href: '/admin/config/payment',
-    icon: Settings,
-  },
-  {
-    title: 'Người dùng',
-    href: '/admin/users',
-    icon: Users,
-  },
-  {
-    title: 'Đánh giá',
-    href: '/admin/reviews',
-    icon: Star,
-  },
+const sidebarItems: { title: string; href: string; icon: typeof LayoutDashboard; adminOnly?: boolean }[] = [
+  { title: 'Dashboard', href: '/admin', icon: LayoutDashboard },
+  { title: 'Khách sạn', href: '/admin/hotels', icon: Building2 },
+  { title: 'Danh mục phòng', href: '/admin/categories', icon: Layers },
+  { title: 'Phòng', href: '/admin/rooms', icon: BedDouble },
+  { title: 'Giá đặc biệt', href: '/admin/special-prices', icon: Percent },
+  { title: 'Đặt phòng', href: '/admin/bookings', icon: CalendarDays },
+  { title: 'Tạo đặt phòng', href: '/admin/bookings/create', icon: PlusCircle },
+  { title: 'Dịch vụ', href: '/admin/services', icon: ConciergeBell },
+  { title: 'Quản lý ví', href: '/admin/wallets', icon: Wallet, adminOnly: true },
+  { title: 'Khuyến mãi', href: '/admin/promotions', icon: Gift },
+  { title: 'Cấu hình', href: '/admin/config/payment', icon: Settings },
+  { title: 'Người dùng', href: '/admin/users', icon: Users, adminOnly: true },
+  { title: 'Đánh giá', href: '/admin/reviews', icon: Star },
 ];
 
 export function AdminLayout() {
@@ -117,7 +59,10 @@ export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user, logout } = useAuthStore();
+  const { user, logout, isLoading } = useAuthStore();
+  const visibleSidebarItems = sidebarItems.filter(
+    (item) => !item.adminOnly || user?.role === 'admin'
+  );
 
   const { data: notificationsData } = useQuery({
     queryKey: ['adminNotifications'],
@@ -147,6 +92,24 @@ export function AdminLayout() {
       navigate('/');
     }
   };
+
+  // Đợi initAuth (getMe) xong mới redirect: reload chỉ có token, chưa có user
+  if (isLoading && !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50/30 via-white to-rose-50/20">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground">Đang tải...</p>
+        </div>
+      </div>
+    );
+  }
+  if (!user) {
+    return <Navigate to="/auth/login" replace />;
+  }
+  if (user.role !== 'admin' && user.role !== 'staff') {
+    return <Navigate to="/hotels" replace />;
+  }
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-orange-50/30 via-white to-rose-50/20 relative overflow-hidden">
@@ -195,7 +158,7 @@ export function AdminLayout() {
           {/* Navigation */}
           <ScrollArea className="flex-1 py-6 px-4">
             <nav className="space-y-1">
-              {sidebarItems.map((item) => {
+              {visibleSidebarItems.map((item) => {
                 const isActive = location.pathname === item.href;
                 return (
                   <Link
@@ -269,7 +232,7 @@ export function AdminLayout() {
             <Menu className="h-5 w-5" />
           </Button>
           <h1 className="text-xl font-semibold text-foreground">
-            {sidebarItems.find((item) => item.href === location.pathname)?.title || 'Admin Dashboard'}
+            {visibleSidebarItems.find((item) => item.href === location.pathname)?.title || 'Admin Dashboard'}
           </h1>
           <div className="ml-auto flex items-center gap-4">
               <DropdownMenu>

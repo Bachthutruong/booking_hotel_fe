@@ -5,6 +5,34 @@ interface UsersResponse extends ApiResponse<User[]> {
   pagination: Pagination;
 }
 
+export interface CreateUserPayload {
+  email: string;
+  fullName: string;
+  phone: string;
+  role: 'user' | 'admin' | 'staff';
+  password?: string;
+}
+
+export interface UserAuditLogItem {
+  _id: string;
+  action: 'created' | 'updated' | 'deleted';
+  targetUser: string;
+  targetUserEmail?: string;
+  targetUserFullName?: string;
+  targetUserRole?: string;
+  performedBy: string;
+  performedByEmail?: string;
+  performedByFullName?: string;
+  details?: string;
+  oldData?: Record<string, unknown>;
+  newData?: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface UserAuditLogsResponse extends ApiResponse<UserAuditLogItem[]> {
+  pagination: Pagination;
+}
+
 export const userService = {
   async getUsers(params?: {
     search?: string;
@@ -14,6 +42,21 @@ export const userService = {
     limit?: number;
   }): Promise<UsersResponse> {
     const { data } = await api.get<UsersResponse>('/users', { params });
+    return data;
+  },
+
+  async createUser(payload: CreateUserPayload): Promise<ApiResponse<User>> {
+    const { data } = await api.post<ApiResponse<User>>('/users', payload);
+    return data;
+  },
+
+  async getUserAuditLogs(params?: {
+    page?: number;
+    limit?: number;
+    action?: 'created' | 'updated' | 'deleted';
+    targetUserId?: string;
+  }): Promise<UserAuditLogsResponse> {
+    const { data } = await api.get<UserAuditLogsResponse>('/users/audit-logs', { params });
     return data;
   },
 

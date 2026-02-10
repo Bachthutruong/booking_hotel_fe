@@ -5,7 +5,7 @@ export interface User {
   fullName: string;
   phone: string;
   avatar: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'staff';
   isActive: boolean;
   walletBalance: number;
   bonusBalance: number;
@@ -132,9 +132,9 @@ export interface SystemConfig {
 
 // Booking types
 export type BookingStatus = 'pending' | 'pending_deposit' | 'awaiting_approval' | 'confirmed' | 'cancelled' | 'completed';
-export type PaymentStatus = 'pending' | 'paid' | 'refunded';
+export type PaymentStatus = 'pending' | 'deposit_paid' | 'paid' | 'refunded';
 export type PaymentMethod = 'bank_transfer' | 'wallet' | 'cash';
-export type PaymentOption = 'use_bonus' | 'use_main_only';
+export type PaymentOption = 'use_bonus' | 'use_main_only' | 'use_cash';
 
 export interface BookingServiceItem {
   service: string | Service;
@@ -142,6 +142,16 @@ export interface BookingServiceItem {
   price: number;
   addedAt?: string;    // Ngày giờ thêm dịch vụ
   deliveredAt?: string; // Admin đã bàn giao (dịch vụ cần xác nhận)
+}
+
+/** Chi tiết giá từng ngày (giá đặc biệt). */
+export interface RoomPriceBreakdownItem {
+  date: string;
+  price: number;
+  label?: string;
+  basePrice?: number;
+  modifierType?: 'percentage' | 'fixed';
+  modifierValue?: number;
 }
 
 export interface Booking {
@@ -158,12 +168,18 @@ export interface Booking {
     children: number;
   };
   roomPrice: number;
+  /** Chi tiết giá từng ngày (khi có giá đặc biệt). */
+  roomPriceBreakdown?: RoomPriceBreakdownItem[];
   servicePrice: number;
   totalPrice: number;
   estimatedPrice: number;
   finalPrice?: number;
   paidFromWallet?: number;
   paidFromBonus?: number;
+  /** Số tiền cọc yêu cầu (tính từ cấu hình). */
+  depositAmount?: number;
+  /** Số tiền cọc đã thanh toán (ví hoặc chuyển khoản sau khi admin duyệt). */
+  paidDepositAmount?: number;
   services: BookingServiceItem[];
   proofImage?: string;
   status: BookingStatus;
@@ -385,6 +401,24 @@ export interface InvoiceItem {
   total: number;
 }
 
+/** Rule giá đặc biệt theo ngày / cuối tuần */
+export type SpecialPriceRuleType = 'date_range' | 'weekend';
+export type SpecialPriceModifierType = 'percentage' | 'fixed';
+
+export interface RoomSpecialPrice {
+  _id: string;
+  name: string;
+  rooms: (string | Room)[];
+  type: SpecialPriceRuleType;
+  startDate?: string;
+  endDate?: string;
+  modifierType: SpecialPriceModifierType;
+  modifierValue: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Invoice {
   invoiceNumber: string;
   createdAt: string;
@@ -400,10 +434,14 @@ export interface Invoice {
   actualCheckIn?: string;
   actualCheckOut?: string;
   nights: number;
+  /** Chi tiết giá từng ngày (khi có giá đặc biệt). */
+  roomPriceBreakdown?: RoomPriceBreakdownItem[];
   items: InvoiceItem[];
   subtotal: number;
   paidFromWallet: number;
   paidFromBonus: number;
+  depositAmount?: number;
+  paidDepositAmount?: number;
   totalPaid: number;
   finalAmount: number;
   status: BookingStatus;

@@ -132,7 +132,14 @@ export const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
 
         {/* Items Table */}
         <div className="mb-6">
-          <h3 className="font-semibold mb-3">Chi tiết hóa đơn</h3>
+          <h3 className="font-semibold mb-3">
+            Chi tiết hóa đơn
+            {invoice.roomPriceBreakdown && invoice.roomPriceBreakdown.length > 0 && (
+              <span className="block text-xs font-normal text-muted-foreground mt-1">
+                Chi tiết giá từng ngày (áp dụng giá đặc biệt)
+              </span>
+            )}
+          </h3>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-300">
@@ -155,28 +162,82 @@ export const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
           </table>
         </div>
 
-        {/* Summary */}
+        {/* Summary: Tạm tính, Tổng đã thanh toán, Tổng cộng. Chỉ hiện "Còn lại" khi thật sự còn nợ. */}
         <div className="border-t pt-4">
           <div className="flex justify-between py-1">
             <span className="text-muted-foreground">Tạm tính:</span>
             <span>{formatPrice(invoice.subtotal)}</span>
           </div>
-          {invoice.paidFromWallet > 0 && (
-            <div className="flex justify-between py-1 text-green-600">
-              <span>Thanh toán từ ví:</span>
-              <span>-{formatPrice(invoice.paidFromWallet)}</span>
-            </div>
-          )}
-          {invoice.paidFromBonus > 0 && (
-            <div className="flex justify-between py-1 text-amber-600">
-              <span>Sử dụng tiền khuyến mãi:</span>
-              <span>-{formatPrice(invoice.paidFromBonus)}</span>
-            </div>
-          )}
+          {(() => {
+            const paidDeposit = invoice.paidDepositAmount ?? 0;
+            const paidWallet = invoice.paidFromWallet ?? 0;
+            const paidBonus = invoice.paidFromBonus ?? 0;
+            const isPaidByCash = invoice.paymentStatus === 'paid' && invoice.paymentMethod === 'cash';
+            const walletAndBonus = paidWallet + paidBonus;
+            // Tránh cộng cọc 2 lần: cọc từ ví đã nằm trong paidWallet → chỉ cộng thêm phần cọc trả bằng CK
+            const totalPaid = isPaidByCash
+              ? invoice.subtotal
+              : Math.min(walletAndBonus + Math.max(0, paidDeposit - paidWallet), invoice.subtotal);
+            const amountAfterDeposit = Math.max(0, invoice.subtotal - paidDeposit);
+            const cashAtCounter = Math.max(0, invoice.subtotal - paidDeposit - paidWallet - paidBonus);
+            if (totalPaid <= 0) return null;
+            return (
+              <>
+                <div className="flex justify-between py-1 text-green-600 font-medium">
+                  <span>Tổng đã thanh toán:</span>
+                  <span>-{formatPrice(totalPaid)}</span>
+                </div>
+                <div className="pl-3 text-xs text-muted-foreground space-y-0.5 border-l-2 border-green-200">
+                  {paidDeposit > 0 && (
+                    <div className="flex justify-between">
+                      <span>Trong đó đã cọc:</span>
+                      <span>{formatPrice(paidDeposit)}</span>
+                    </div>
+                  )}
+                  {amountAfterDeposit > 0 && (paidWallet > 0 || paidBonus > 0) && !isPaidByCash && (
+                    <div className="flex justify-between">
+                      <span>Thanh toán từ ví / tiền mặt (tổng − đã cọc):</span>
+                      <span>{formatPrice(amountAfterDeposit)}</span>
+                    </div>
+                  )}
+                  {paidBonus > 0 && (
+                    <div className="flex justify-between">
+                      <span>Tiền khuyến mãi:</span>
+                      <span>{formatPrice(paidBonus)}</span>
+                    </div>
+                  )}
+                  {isPaidByCash && cashAtCounter > 0 && (
+                    <div className="flex justify-between">
+                      <span>Thanh toán tiền mặt tại quầy:</span>
+                      <span>{formatPrice(cashAtCounter)}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
           <div className="flex justify-between py-2 text-lg font-bold border-t mt-2">
             <span>Tổng cộng:</span>
             <span className="text-primary">{formatPrice(invoice.finalAmount)}</span>
           </div>
+          {(() => {
+            const paidDeposit = invoice.paidDepositAmount ?? 0;
+            const paidWallet = invoice.paidFromWallet ?? 0;
+            const paidBonus = invoice.paidFromBonus ?? 0;
+            const isPaidByCash = invoice.paymentStatus === 'paid' && invoice.paymentMethod === 'cash';
+            const walletAndBonus = paidWallet + paidBonus;
+            const totalPaid = isPaidByCash
+              ? invoice.subtotal
+              : Math.min(walletAndBonus + Math.max(0, paidDeposit - paidWallet), invoice.subtotal);
+            const remaining = Math.max(0, invoice.subtotal - totalPaid);
+            if (remaining === 0) return null;
+            return (
+              <div className="flex justify-between py-1 text-amber-600 font-medium text-sm">
+                <span>Còn lại cần thanh toán:</span>
+                <span>{formatPrice(remaining)}</span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Payment Info */}
@@ -191,8 +252,12 @@ export const InvoicePrint = forwardRef<HTMLDivElement, InvoicePrintProps>(
             </div>
             <div>
               <p className="text-muted-foreground">Trạng thái:</p>
-              <p className={`font-medium ${invoice.paymentStatus === 'paid' ? 'text-green-600' : 'text-amber-600'}`}>
-                {invoice.paymentStatus === 'paid' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+              <p className={`font-medium ${
+                invoice.paymentStatus === 'paid' ? 'text-green-600' :
+                invoice.paymentStatus === 'deposit_paid' ? 'text-teal-600' : 'text-amber-600'
+              }`}>
+                {invoice.paymentStatus === 'paid' ? 'Đã thanh toán toàn bộ' :
+                 invoice.paymentStatus === 'deposit_paid' ? 'Đã thanh toán tiền cọc' : 'Chưa thanh toán'}
               </p>
             </div>
           </div>

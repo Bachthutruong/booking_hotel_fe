@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, Upload, CheckCircle, Clock, AlertCircle, Banknote } from 'lucide-react';
 import { format } from 'date-fns';
+import { vi } from 'date-fns/locale';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -16,6 +17,7 @@ import { configService } from '@/services/configService';
 import { walletService } from '@/services/walletService';
 import { useAuthStore } from '@/store/authStore';
 import { formatPrice } from '@/lib/utils';
+import { RoomPriceBreakdown } from '@/components/booking/RoomPriceBreakdown';
 import type { Booking } from '@/types';
 
 interface DepositConfig {
@@ -255,12 +257,22 @@ export default function BookingPaymentPage() {
              <div className="space-y-2">
                 <span className="block font-medium">Dịch vụ đi kèm:</span>
                 {booking.services && booking.services.length > 0 ? (
-                    <ul className="list-disc list-inside text-sm text-gray-600">
-                        {booking.services.map((s, idx) => (
+                    <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                        {booking.services.map((s, idx) => {
+                          const serviceName = (s.service && typeof s.service === 'object' && 'name' in s.service)
+                            ? (s.service as { name: string }).name
+                            : 'Dịch vụ';
+                          const addedAt = s.addedAt
+                            ? format(new Date(s.addedAt), 'dd/MM/yyyy HH:mm', { locale: vi })
+                            : null;
+                          return (
                             <li key={idx}>
-                                {(s.service as any).name} (x{s.quantity}) - {formatPrice(s.price * s.quantity)}
+                              <span className="font-medium">{serviceName}</span>
+                              {' '}(x{s.quantity}) - {formatPrice(s.price * s.quantity)}
+                              {addedAt && <span className="block text-xs text-muted-foreground mt-0.5">Thêm lúc: {addedAt}</span>}
                             </li>
-                        ))}
+                          );
+                        })}
                     </ul>
                 ) : (
                     <p className="text-sm text-gray-500">Không có</p>
@@ -268,6 +280,14 @@ export default function BookingPaymentPage() {
              </div>
 
              <Separator />
+
+             {booking.roomPriceBreakdown && booking.roomPriceBreakdown.length > 0 && (
+               <RoomPriceBreakdown
+                 breakdown={booking.roomPriceBreakdown}
+                 roomName={typeof booking.room === 'object' && booking.room ? (booking.room as { name?: string }).name : undefined}
+                 compact
+               />
+             )}
              
              <div className="space-y-3">
                 <div className="flex justify-between items-center text-lg">
@@ -375,23 +395,32 @@ export default function BookingPaymentPage() {
                 </Card>
             )}
 
-            {/* Tải / thay minh chứng: khi chờ cọc luôn hiện form; khi đã có ảnh thì hiện ảnh + nút Thay ảnh */}
-            {booking.status === 'pending_deposit' && (
+            {/* Tải / thay minh chứng: khi chờ cọc hoặc chờ duyệt đều được gửi hoặc tải lại ảnh */}
+            {(booking.status === 'pending_deposit' || booking.status === 'awaiting_approval') && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>{booking.proofImage ? 'Minh chứng đã gửi' : 'Tải lên minh chứng thanh toán'}</CardTitle>
+                        <CardTitle>
+                          {booking.proofImage
+                            ? (booking.status === 'awaiting_approval' ? 'Minh chứng đã gửi (đang chờ duyệt)' : 'Minh chứng đã gửi')
+                            : 'Tải lên minh chứng thanh toán'}
+                        </CardTitle>
                         <CardDescription>
-                          Chụp màn hình giao dịch chuyển khoản thành công và tải lên.
+                          {booking.status === 'awaiting_approval'
+                            ? 'Đang chờ admin xác nhận. Bạn có thể tải ảnh mới để thay thế nếu cần.'
+                            : 'Chụp màn hình giao dịch chuyển khoản thành công và tải lên.'}
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {booking.proofImage && !file && (
                             <div className="space-y-2">
                                 <img src={booking.proofImage} alt="Minh chứng" className="w-full max-h-64 object-contain rounded-lg border" />
-                                <p className="text-sm text-muted-foreground">Muốn gửi ảnh khác? Chọn ảnh bên dưới và bấm &quot;Xác nhận đã chuyển khoản&quot;.</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {booking.status === 'awaiting_approval'
+                                    ? 'Muốn thay ảnh? Chọn ảnh bên dưới và bấm Gửi ảnh mới;.'
+                                    : 'Muốn gửi ảnh khác? Chọn ảnh bên dưới và bấm Xác nhận đã chuyển khoản.'}
+                                </p>
                             </div>
                         )}
-                        {/* Preview ảnh vừa chọn trước khi gửi */}
                         {previewUrl && (
                             <div className="space-y-2">
                                 <Label>Xem trước ảnh</Label>
@@ -412,21 +441,11 @@ export default function BookingPaymentPage() {
                                 disabled={!file || uploading}
                             >
                                 {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                {booking.proofImage ? 'Gửi ảnh mới (thay ảnh cọc)' : 'Xác nhận đã chuyển khoản'}
+                                {booking.proofImage
+                                  ? 'Gửi ảnh mới (thay ảnh cọc)'
+                                  : 'Xác nhận đã chuyển khoản'}
                             </Button>
                         </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {booking.proofImage && booking.status === 'awaiting_approval' && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Minh chứng đã gửi</CardTitle>
-                        <CardDescription>Đang chờ admin xác nhận. Cần thay ảnh thì liên hệ hỗ trợ.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <img src={booking.proofImage} alt="Minh chứng" className="w-full max-h-64 object-contain rounded-lg border" />
                     </CardContent>
                 </Card>
             )}

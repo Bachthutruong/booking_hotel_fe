@@ -1,7 +1,17 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, rehydratedPromise } from '@/store/authStore';
+
+/** Chỉ admin mới vào được; nhân viên (staff) redirect về /admin */
+function AdminOnlyRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  const location = useLocation();
+  if (user?.role !== 'admin') {
+    return <Navigate to="/admin" replace state={{ from: location.pathname }} />;
+  }
+  return <>{children}</>;
+}
 import { authService } from '@/services/authService';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -42,11 +52,10 @@ import CreateBookingPage from '@/pages/admin/CreateBookingPage';
 import UsersManagePage from '@/pages/admin/UsersManagePage';
 import RoomsManagePage from '@/pages/admin/RoomsManagePage';
 import ReviewsManagePage from '@/pages/admin/ReviewsManagePage';
-import DepositsManagePage from '@/pages/admin/DepositsManagePage';
-import WithdrawalsManagePage from '@/pages/admin/WithdrawalsManagePage';
 import WalletsManagePage from '@/pages/admin/WalletsManagePage';
 import PromotionsManagePage from '@/pages/admin/PromotionsManagePage';
 import CategoriesManagePage from '@/pages/admin/CategoriesManagePage';
+import SpecialPriceManagePage from '@/pages/admin/SpecialPriceManagePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,19 +68,30 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const { token, setUser, setLoading } = useAuthStore();
+  const [hydrated, setHydrated] = useState(false);
+
+  // Đợi persist rehydrate xong (đặc biệt quan trọng với ẩn danh/reload) rồi mới initAuth
+  useEffect(() => {
+    rehydratedPromise.then(() => setHydrated(true));
+  }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
+
     const initAuth = async () => {
-      if (token) {
+      const currentToken = useAuthStore.getState().token ?? token;
+      if (currentToken) {
         try {
           const response = await authService.getMe();
           if (response.data) {
             setUser(response.data);
           }
-        } catch (error) {
+        } catch (error: unknown) {
           console.error('Failed to fetch user:', error);
-          // Optionally clear token if invalid
-          // useAuthStore.getState().logout();
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          if (status === 401) {
+            useAuthStore.getState().logout();
+          }
         } finally {
           setLoading(false);
         }
@@ -81,7 +101,7 @@ function AppContent() {
     };
 
     initAuth();
-  }, [token, setUser, setLoading]);
+  }, [hydrated, token, setUser, setLoading]);
 
   return (
     <Routes>
@@ -122,14 +142,13 @@ function AppContent() {
         
         {/* Full Implementation Routes */}
         <Route path="rooms" element={<RoomsManagePage />} />
-        <Route path="users" element={<UsersManagePage />} />
         <Route path="reviews" element={<ReviewsManagePage />} />
 
-        {/* Wallet Management Routes */}
-        <Route path="deposits" element={<DepositsManagePage />} />
-        <Route path="withdrawals" element={<WithdrawalsManagePage />} />
-        <Route path="wallets" element={<WalletsManagePage />} />
+        {/* Chỉ admin: Người dùng, Quản lý ví (gộp nạp tiền + hoàn tiền + danh sách ví) */}
+        <Route path="users" element={<AdminOnlyRoute><UsersManagePage /></AdminOnlyRoute>} />
+        <Route path="wallets" element={<AdminOnlyRoute><WalletsManagePage /></AdminOnlyRoute>} />
         <Route path="promotions" element={<PromotionsManagePage />} />
+        <Route path="special-prices" element={<SpecialPriceManagePage />} />
         <Route path="categories" element={<CategoriesManagePage />} />
       </Route>
 

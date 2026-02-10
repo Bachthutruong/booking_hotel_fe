@@ -54,10 +54,12 @@ import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import { hotelService } from '@/services/hotelService';
 import { formatPrice } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useCanDelete } from '@/hooks/useCanDelete';
 import type { Hotel } from '@/types';
 
 export function HotelsManagePage() {
   const queryClient = useQueryClient();
+  const canDelete = useCanDelete();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -231,13 +233,15 @@ export function HotelsManagePage() {
                           <Edit className="mr-2 h-4 w-4" />
                           Chỉnh sửa
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setDeleteHotel(hotel)}
-                          className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Xóa
-                        </DropdownMenuItem>
+                        {canDelete && (
+                          <DropdownMenuItem
+                            onClick={() => setDeleteHotel(hotel)}
+                            className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Xóa
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -301,6 +305,7 @@ export function HotelsManagePage() {
           }
         }}
         hotel={editHotel}
+        canDelete={canDelete}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['adminHotels'] });
           setIsCreateOpen(false);
@@ -343,11 +348,13 @@ function HotelFormDialog({
   onOpenChange,
   hotel,
   onSuccess,
+  canDelete = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hotel: Hotel | null;
   onSuccess: () => void;
+  canDelete?: boolean;
 }) {
   const [formData, setFormData] = useState({
     name: hotel?.name || '',
@@ -525,14 +532,16 @@ function HotelFormDialog({
                 {currentImages.map((img, i) => (
                   <div key={`existing-${i}`} className="relative group aspect-square rounded-md overflow-hidden border">
                     <img src={img} alt={`Existing ${i}`} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removeExistingImage(i)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Xóa ảnh này"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(i)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Xóa ảnh này"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                     <Badge className="absolute bottom-1 left-1 px-1 py-0 text-[10px] bg-black/50 hover:bg-black/70">
                         Cũ
                     </Badge>
@@ -543,14 +552,16 @@ function HotelFormDialog({
                 {previewUrls.map((url, i) => (
                   <div key={`new-${i}`} className="relative group aspect-square rounded-md overflow-hidden border">
                     <img src={url} alt={`Preview ${i}`} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => removeFile(i)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Xóa ảnh này"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={() => removeFile(i)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Xóa ảnh này"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                     <Badge className="absolute bottom-1 left-1 px-1 py-0 text-[10px] bg-green-500 hover:bg-green-600">
                         Mới
                     </Badge>

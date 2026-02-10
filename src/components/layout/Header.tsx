@@ -155,7 +155,7 @@ export function Header() {
                     </div>
                   </div>
                   
-                  {user.role === 'admin' && (
+                  {(user.role === 'admin' || user.role === 'staff') && (
                     <DropdownMenuItem asChild className="rounded-lg cursor-pointer focus:bg-primary/10 focus:text-primary">
                       <Link to="/admin">
                         <Settings className="mr-2 h-4 w-4" />
